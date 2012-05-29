@@ -15,7 +15,20 @@ import urlparse
 import requests
 from requests.models import REDIRECT_STATI
 
+
 __version__ = '0.3'
+
+__all__ = [
+    'Config',
+    'Error',
+    'Redirection',
+    'Client',
+    'NoResultFound',
+    'MultipleResultsFound',
+    'URISpec',
+    'ResourceRegistry',
+    'Resource',
+    ]
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +348,14 @@ class Client(threading.local, object):
 
 # paging
 
+class NoResultFound(Exception):
+    pass
+
+
+class MultipleResultsFound(Exception):
+    pass
+
+
 class Page(object):
     """
     Represents a page of resources in an pagination. These are used by
@@ -487,6 +508,12 @@ class Pagination(object):
     def count(self):
         return int(math.ceil(self.current.total / self.size))
 
+    def one(self):
+        if self.count() > 1:
+            raise MultipleResultsFound()
+        self.current = self[0]
+        return self.current
+
     def first(self):
         self.current = self[0]
         return self.current
@@ -563,6 +590,15 @@ class PaginationMixin(object):
 
     def all(self):
         return list(self)
+
+    def one(self):
+        self.first()
+        count = self.count()
+        if count == 0:
+            raise NoResultFound()
+        elif count > 1:
+            raise MultipleResultsFound()
+        return self[0]
 
     def first(self):
         page = self.pagination.first()

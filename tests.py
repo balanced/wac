@@ -603,6 +603,32 @@ class TestPagination(TestCase):
         pages = [p for p in pagination]
         self.assertEqual([page2, page3, page4], pages)
 
+    @patch.object(wac.Pagination, '_page')
+    def test_first(self, _page):
+
+        def _page_patch(key):
+            return pages[key]
+
+        _page.side_effect = _page_patch
+
+        # multiple
+        pages = [
+            Mock(items=[1, 2, 3], total=5),
+            Mock(items=[4, 5], total=5),
+            ]
+        uri = '/a/uri'
+        pagination = wac.Pagination(None, uri, 3)
+        with self.assertRaises(wac.MultipleResultsFound):
+            pagination.one()
+
+        # one
+        pages = [
+            Mock(items=[1, 2, 3], total=3),
+            ]
+        uri = '/a/uri'
+        pagination = wac.Pagination(None, uri, 3)
+        self.assertEqual(pagination.one(), pages[0])
+
 
 class TestQuery(TestCase):
 
@@ -685,6 +711,34 @@ class TestQuery(TestCase):
         items = q.all()
         self.assertEqual(expected_items, items)
         self.assertEqual(q.pagination.current, page3)
+
+    @patch.object(wac.Pagination, '_page')
+    def test_one(self, _page):
+
+        def _page_patch(key):
+            return pages[key]
+
+        _page.side_effect = _page_patch
+
+        # none
+        pages = [Mock(previous=None, next=None, items=[], total=0)]
+        uri = '/ur/is'
+        q = wac.Query(Resource1, uri, 3)
+        with self.assertRaises(wac.NoResultFound):
+            q.one()
+
+        # multiple
+        pages = [Mock(previous=None, next=None, items=[1, 2, 3], total=3)]
+        uri = '/ur/is'
+        q = wac.Query(Resource1, uri, 3)
+        with self.assertRaises(wac.MultipleResultsFound):
+            q.one()
+
+        # one
+        pages = [Mock(previous=None, next=None, items=['one'], total=1)]
+        uri = '/ur/is'
+        q = wac.Query(Resource1, uri, 3)
+        self.assertEqual(q.one(), 'one')
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):

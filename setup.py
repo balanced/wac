@@ -1,7 +1,3 @@
-"""
-Web application client.
-"""
-import os
 import re
 
 try:
