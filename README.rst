@@ -7,7 +7,7 @@ wac
 To write a friendly client for a RESTful API you typically end up doing the
 following:
 
-- Write HTTP client commands when communicating with the server. These commands
+- Write HTTP client commands for communicating with the server. These commands
   do things like marshal payloads, convert errors, invoke request hooks, etc.
 
 - Turn responses deserialized by your client into resource objects (i.e.
@@ -53,16 +53,15 @@ Lets work through an example. The code for this example is in ``example.py``.
 
     import wac
     
-- Next define your the version of your client::
+- Next define the version of your client::
 
     __version__ = '1.0'
     
-- Also define the default configuration which all `Client` will use by
-  default::
+- Also define the configuration which all ``Client``s will use by default::
 
     default_config = wac.Config(None)
     
-- Now be nice and define a function for updating client configuration(s)::
+- Now be nice and define a function for updating the configuration(s)::
 
     def configure(root_url, **kwargs):
         default = kwargs.pop('default', True)
@@ -75,8 +74,8 @@ Lets work through an example. The code for this example is in ``example.py``.
         else:
             Client.config = wac.Config(root_url, **kwargs
 
-- Now the big one, define your `Client` which is what your client will use to
-  talk to a server::
+- Now the big one, define your ``Client`` which is what will be used to talk to
+  a server::
 
     class Client(wac.Client):
 
@@ -93,7 +92,7 @@ Lets work through an example. The code for this example is in ``example.py``.
             data = json.loads(response.content)
             return data
 
-- Then define your base `Resource`::
+- Then define your base ``Resource``::
 
     class Resource(wac.Resource):
     

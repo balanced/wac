@@ -369,8 +369,8 @@ class TestPage(TestCase):
                 }
             response.content = to_json(data)
             page = wac.Page('/a/uri', Resource)
-            fetched1 = page._fetch()
-            fetched2 = page._fetch()
+            fetched1 = page.fetch()
+            fetched2 = page.fetch()
 
         get.assert_called_once_with(
             'http://ex.com/a/uri',
@@ -512,15 +512,33 @@ class TestPagination(TestCase):
         self.assertEqual(page, None)
         self.assertEqual(pagination.current, expected_page)
 
+    @patch.object(wac.Pagination, '_page')
     @patch('wac.Page')
-    def test_count(self, Page):
-        page1 = Mock()
-        page1.total = 101
+    def test_count(self, Page, _page):
+        page1_unfetched = Mock(fetched=False)
+        page1_fetched = Mock(items=[1, 2, 3], total=8, fetched=True)
+
+        def _page_patch(key, size=None):
+            return [page1_fetched][key]
+
+        _page.side_effect = _page_patch
+
+        uri = '/a/uri'
+        pagination = wac.Pagination(None, uri, 6, page1_unfetched)
+        expected_count = int(math.ceil(page1_fetched.total / pagination.size))
+        self.assertEqual(pagination.count(), expected_count)
+        _page.assert_called_once_with(0, 1)
+
+    @patch.object(wac.Pagination, '_page')
+    @patch('wac.Page')
+    def test_count_cached(self, Page, _page):
+        page1 = Mock(total=101, fetched=True)
         Page.return_value = page1
         uri = '/a/uri'
-        pagination = wac.Pagination(None, uri, 6)
+        pagination = wac.Pagination(None, uri, 6, page1)
         expected_count = int(math.ceil(page1.total / pagination.size))
         self.assertEqual(pagination.count(), expected_count)
+        self.assertEqual(_page.call_count, 0)
 
     @patch.object(wac.Pagination, '_page')
     def test_index(self, _page):
@@ -715,30 +733,73 @@ class TestQuery(TestCase):
     @patch.object(wac.Pagination, '_page')
     def test_one(self, _page):
 
-        def _page_patch(key):
+        def _page_patch(key, size=None):
             return pages[key]
 
         _page.side_effect = _page_patch
 
         # none
-        pages = [Mock(previous=None, next=None, items=[], total=0)]
+        pages = [Mock(items=[], total=0, offset=0, fetched=False)]
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)
+        _page.reset_mock()
         with self.assertRaises(wac.NoResultFound):
             q.one()
+        self.assertEqual(_page.call_count, 4)
+        _page.reset_mock()
 
         # multiple
-        pages = [Mock(previous=None, next=None, items=[1, 2, 3], total=3)]
+        pages = [Mock(items=[1, 2, 3], total=3, offset=0, fetched=False)]
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)
+        _page.reset_mock()
         with self.assertRaises(wac.MultipleResultsFound):
             q.one()
+        self.assertEqual(_page.call_count, 3)
+        _page.reset_mock()
 
         # one
-        pages = [Mock(previous=None, next=None, items=['one'], total=1)]
+        pages = [Mock(items=['one'], total=1, offset=0, fetched=False)]
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)
-        self.assertEqual(q.one(), 'one')
+        _page.reset_mock()
+        item = q.one()
+        self.assertEqual(item, 'one')
+        self.assertEqual(_page.call_count, 3)
+        _page.reset_mock()
+
+    @patch.object(wac.Pagination, '_page')
+    def test_one_cached(self, _page):
+
+        # none
+        page = Mock(items=[], offset=0, total=0, fetched=True)
+        _page.return_value = page
+        uri = '/ur/is'
+        q = wac.Query(Resource1, uri, 3)
+        _page.reset_mock()
+        with self.assertRaises(wac.NoResultFound):
+            q.one()
+        _page.assert_called_once_with(0)
+
+        # multiple
+        page = Mock(items=[1, 2, 3], offset=0, total=3, fetched=True)
+        _page.return_value = page
+        uri = '/ur/is'
+        q = wac.Query(Resource1, uri, 3)
+        _page.reset_mock()
+        with self.assertRaises(wac.MultipleResultsFound):
+            q.one()
+        _page.assert_called_once_with(0)
+
+        # one
+        page = Mock(items=['one'], offset=0, total=1, fetched=True)
+        _page.return_value = page
+        uri = '/ur/is'
+        q = wac.Query(Resource1, uri, 3)
+        _page.reset_mock()
+        item = q.one()
+        self.assertEqual(item, 'one')
+        _page.assert_called_once_with(0)
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):
@@ -752,7 +813,7 @@ class TestQuery(TestCase):
         page3.previous = page2
         page3.next = None
 
-        def _page_patch(key):
+        def _page_patch(key, size=None):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
@@ -764,7 +825,19 @@ class TestQuery(TestCase):
         self.assertEqual(expected_item, item)
 
     @patch.object(wac.Pagination, '_page')
-    def test_count(self, _page):
+    def test_first_cached(self, _page):
+        page = Mock(items=[1, 2, 3], offset=0, total=3, fetched=True)
+        _page.return_value = page
+        uri = '/ur/is'
+        q = wac.Query(Resource1, uri, 3)
+        expected_item = 1
+        item = q.first()
+        self.assertEqual(expected_item, item)
+        self.assertEqual(_page.call_count, 1)
+
+    @patch.object(wac.Pagination, '_page')
+    @patch('wac.Page')
+    def test_count(self, Page, _page):
         page1 = Mock(items=[1, 2, 3], total=8)
 
         def _page_patch(key):
@@ -949,7 +1022,7 @@ class TestResource(TestCase):
         self._objectify_equal(o)
 
     def test_query(self):
-        q = Resource1.query()
+        q = Resource1.query
         self.assertTrue(isinstance(q, wac.Query))
         self.assertEqual(q.uri, Resource1.uri_spec.collection_uri)
 

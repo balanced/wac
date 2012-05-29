@@ -33,6 +33,40 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
+# utilities
+
+# http://stackoverflow.com/a/5191224/1339571
+class _ClassPropertyDescriptor(object):
+
+    def __init__(self, fget, fset=None):
+        self.fget = fget
+        self.fset = fset
+
+    def __get__(self, obj, klass=None):
+        if klass is None:
+            klass = type(obj)
+        return self.fget.__get__(obj, klass)()
+
+    def __set__(self, obj, value):
+        if not self.fset:
+            raise AttributeError("can't set attribute")
+        type_ = type(obj)
+        return self.fset.__get__(obj, type_)(value)
+
+    def setter(self, func):
+        if not isinstance(func, (classmethod, staticmethod)):
+            func = classmethod(func)
+        self.fset = func
+        return self
+
+
+# http://stackoverflow.com/a/5191224/1339571
+def classproperty(func):
+    if not isinstance(func, (classmethod, staticmethod)):
+        func = classmethod(func)
+    return _ClassPropertyDescriptor(func)
+
+
 # client
 
 class Config(object):
@@ -409,8 +443,8 @@ class Page(object):
                 ])
         return '{}({})'.format('Page', attrs)
 
-    def _fetch(self):
-        if not self._page:
+    def fetch(self):
+        if not self.fetched:
             resp = self.resource.client.get(self.uri)
             page = resp.data
             page['items'] = [
@@ -420,43 +454,47 @@ class Page(object):
         return self._page
 
     @property
+    def fetched(self):
+        return self._page is not None
+
+    @property
     def index(self):
         return int(self.offset / self.total) if self.total else 0
 
     @property
     def items(self):
-        return self._fetch()['items']
+        return self.fetch()['items']
 
     @property
     def total(self):
-        return self._fetch()['total']
+        return self.fetch()['total']
 
     @property
     def offset(self):
-        return self._fetch()['offset']
+        return self.fetch()['offset']
 
     @property
     def limit(self):
-        return self._fetch()['limit']
+        return self.fetch()['limit']
 
     @property
     def first(self):
-        uri = self._fetch()['first_uri']
+        uri = self.fetch()['first_uri']
         return Page(uri, self.resource)
 
     @property
     def previous(self):
-        uri = self._fetch()['previous_uri']
+        uri = self.fetch()['previous_uri']
         return Page(uri, self.resource) if uri else None
 
     @property
     def next(self):
-        uri = self._fetch()['next_uri']
+        uri = self.fetch()['next_uri']
         return Page(uri, self.resource) if uri else None
 
     @property
     def last(self):
-        uri = self._fetch()['last_uri']
+        uri = self.fetch()['last_uri']
         return Page(uri, self.resource)
 
 
@@ -493,12 +531,12 @@ class Pagination(object):
         uri = uri + '?' + qs
         if qs:
             uri += '&'
-        qs = urllib.urlencode([('limit', size)], doseq=True)
-        uri += '&'
         return uri
 
-    def _page(self, key):
+    def _page(self, key, size=None):
+        size = size or self.size
         qs = [
+            ('limit', self.size),
             ('offset', key * self.size),
             ]
         qs = urllib.urlencode(qs, doseq=True)
@@ -506,7 +544,11 @@ class Pagination(object):
         return Page(self.resource, uri)
 
     def count(self):
-        return int(math.ceil(self.current.total / self.size))
+        if self.current.fetched:
+            total = self.current.total
+        else:
+            total = self._page(0, 1).total
+        return int(math.ceil(total / self.size))
 
     def one(self):
         if self.count() > 1:
@@ -586,23 +628,37 @@ class PaginationMixin(object):
     """
 
     def count(self):
-        return self.pagination.current.total
+        page = self.pagination.current
+        if page.feched:
+            total = page.total
+        else:
+            total = self.pagination._page(0, 1).total
+        return total
 
     def all(self):
         return list(self)
 
     def one(self):
-        self.first()
-        count = self.count()
-        if count == 0:
-            raise NoResultFound()
-        elif count > 1:
+        page = self.pagination.current
+        if page.fetched and page.offset == 0:
+            items = page.items
+            total = page.total
+        else:
+            items = self.pagination._page(0, 2).items
+            total = len(items)
+        if total > 1:
             raise MultipleResultsFound()
-        return self[0]
+        elif total == 0:
+            raise NoResultFound()
+        return items[0]
 
     def first(self):
-        page = self.pagination.first()
-        return page.items[0] if page.items else None
+        page = self.pagination.current
+        if page.fetched and page.offset == 0:
+            items = page.items
+        else:
+            items = self.pagination._page(0, 1).items
+        return items[0] if items else None
 
     def __iter__(self):
         self.pagination.first()
@@ -745,8 +801,8 @@ class Query(PaginationMixin):
     def __init__(self, resource, uri, page_size):
         super(Query, self).__init__()
         self.resource = resource
-        self.uri, self.filters, self.sorts, self.page_size = self._parse_uri(
-            uri, page_size)
+        parsed = self._parse_uri(uri, page_size)
+        self.uri, self.filters, self.sorts, self.page_size = parsed
         self._pagination = None
 
     @staticmethod
@@ -846,7 +902,7 @@ class URISpec(object):
                     uri_spec = wac.URISpec('identities', 'guid', root='/v2')
 
 
-                MyResource.query()  # fails
+                MyResource.query  # fails
                 MyResource(a='123').save()  # fails
     `page_size`
         Default number of items in pages for this type of resource.
@@ -1026,7 +1082,7 @@ class Resource(object):
 
     You can now use your resorces as you would say models of an ORM::
 
-        q = (Playlist.query()
+        q = (Playlist.query
             .filter(Playlist.f.tags.contains('nuti'))
             .filter(~Playlist.f.tags.contains('sober'))
             .sort(Playlist.f.created_at.desc()))
@@ -1102,14 +1158,13 @@ class Resource(object):
             else:
                 setattr(self, key, value)
 
-    @classmethod
-    def query(cls, **kwargs):
+    @classproperty
+    def query(cls):
         if not hasattr(cls.uri_spec, 'collection_uri'):
             raise TypeError('Unable to query {} resources directly'
                 .format(cls.__name__))
-        page_size = kwargs.pop('page_size', cls.uri_spec.page_size)
-        return Query(
-            cls, cls.uri_spec.collection_uri, page_size=page_size, **kwargs)
+        page_size = cls.uri_spec.page_size
+        return Query(cls, cls.uri_spec.collection_uri, page_size=page_size)
 
     @classmethod
     def get(cls, uri):
