@@ -22,7 +22,7 @@ setup(
     url='https://github.com/bninja/wac/',
     license=open('LICENSE').read(),
     author='wac',
-    author_email='wac@aix.com',
+    author_email='wac@example.com',
     description='Writing RESTful API clients.',
     long_description=(
         open('README.rst').read() + '\n\n' +
