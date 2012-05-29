@@ -1093,9 +1093,9 @@ class Resource(object):
         else:
             method = self.client.put
 
-        attrs = {
-            k: v for k, v in attrs.iteritems() if not isinstance(v, Resource)
-            }
+        attrs = dict(
+            (k, v) for k, v in attrs.iteritems() if not isinstance(v, Resource)
+            )
 
         response = method(uri, data=attrs)
 
