@@ -16,7 +16,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.3'
+__version__ = '0.4'
 
 __all__ = [
     'Config',
@@ -109,6 +109,14 @@ class Config(object):
     `allow_redirects`
         Flag indicating whether client should follow server redirects (e.g.
         Location header for a 301). Defaults to False.
+    `error_class`
+        Callable used to convert ``requests.HTTPError`` exceptions with the
+        following signature:
+
+            def convert_error(ex)
+                ...
+
+        where ``ex`` is an instance of ``requests.HTTPError``.
     `before_request`
         A list of callables to invoke each time before a request is made with
         the following signature:
@@ -142,15 +150,17 @@ class Config(object):
             auth=None,
             headers=None,
             echo=False,
-            allow_redirects=False):
+            allow_redirects=False,
+            error_class=None):
         self.reset(
             root_url,
-            client_agent,
-            user_agent,
-            auth,
-            headers,
-            echo,
-            allow_redirects)
+            client_agent=client_agent,
+            user_agent=user_agent,
+            auth=auth,
+            headers=headers,
+            echo=False,
+            allow_redirects=allow_redirects,
+            error_class=error_class)
 
     def reset(self,
             root_url,
@@ -159,7 +169,8 @@ class Config(object):
             auth=None,
             headers=None,
             echo=False,
-            allow_redirects=False):
+            allow_redirects=False,
+            error_class=None):
         headers = headers or {}
         self.root_url = root_url.rstrip('/') if root_url else None
         user_agent = ' '.join(p for p in [client_agent, user_agent] if p)
@@ -168,6 +179,7 @@ class Config(object):
         self.auth = auth
         self.headers = headers
         self.allow_redirects = allow_redirects
+        self.error_class = error_class or Error
         self.before_request = []
         self.after_request = []
         if echo:
@@ -187,7 +199,7 @@ class Config(object):
 class Error(requests.HTTPError):
     """
     Represents HTTP errors detected by `Client` as specialization of
-    `requests.HTTPError`
+    `requests.HTTPError`.
 
     `message`
         String message formatted by `format_message`. For different formatting
@@ -304,7 +316,6 @@ class Client(threading.local, object):
 
     def __init__(self, error_class=None):
         super(Client, self).__init__()
-        self.error_class = error_class or Error
         self._configs = []
 
     def get(self, uri, **kwargs):
@@ -351,7 +362,8 @@ class Client(threading.local, object):
                 handler(ex.response)
             if ex.response.status_code in REDIRECT_STATI:
                 raise Redirection(ex)
-            raise self.error_class(ex)
+            ex = self.config.error_class(ex)
+            raise ex
 
         response.data = None
         if (kwargs.get('return_response', True) and

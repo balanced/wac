@@ -257,7 +257,7 @@ class TestClient(TestCase):
         self.assertIs(org_config, self.cli.config)
 
     @patch('wac.requests.get')
-    def test_exception_conversion(self, _op):
+    def test_default_errors(self, _op):
         ex = wac.requests.HTTPError()
         ex.response = Mock()
         ex.response.status_code = 402
@@ -280,6 +280,63 @@ class TestClient(TestCase):
                 ("Bad Request: 400: Invalid field 'your mom' -- make sure its "
                  "your dad too")
                 )
+
+    @patch('wac.requests.get')
+    def test_custom_errors(self, _op):
+
+        class ErrorType(Exception):
+            pass
+
+        class ErrorType1(Exception):
+            pass
+
+        class ErrorType2(Exception):
+            pass
+
+        def convert_error(ex):
+            if hasattr(ex.response, 'data'):
+                type = ex.response.data.get('type')
+                if type == 'type-1':
+                    ex = ErrorType1()
+                elif type == 'type-2':
+                    ex = ErrorType2()
+                else:
+                    ex = ErrorType()
+            return ex
+
+        ex = wac.requests.HTTPError()
+        ex.response = Mock()
+        ex.response.status_code = 402
+        ex_data = {
+            'status': '400 Bad Request',
+            'status_code': '400',
+            'additional': None,
+            }
+        ex.response.headers = {
+            'Content-Type': 'application/json',
+            }
+        _op.__name__ = 'get'
+        _op.side_effect = ex
+
+        with self.cli:
+            self.cli.config.root_url = '/test'
+            self.cli.config.echo = False
+            self.cli.config.error_class = convert_error
+
+            ex_data['type'] = 'type-1'
+            ex.response.content = to_json(ex_data)
+            with self.assertRaises(ErrorType1) as exc:
+                self.cli.get('/rejected')
+
+            ex_data['type'] = 'type-2'
+            ex.response.content = to_json(ex_data)
+            with self.assertRaises(ErrorType2) as exc:
+                self.cli.get('/rejected')
+
+            ex_data['type'] = 'type-1138'
+            ex.response.content = to_json(ex_data)
+            with self.assertRaises(ErrorType) as exc:
+                self.cli.get('/rejected')
 
     @patch('wac.requests.post')
     def test_request_handlers(self, f):
