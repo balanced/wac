@@ -158,7 +158,7 @@ class Config(object):
             user_agent=user_agent,
             auth=auth,
             headers=headers,
-            echo=False,
+            echo=echo,
             allow_redirects=allow_redirects,
             error_class=error_class)
 
@@ -204,7 +204,7 @@ class Error(requests.HTTPError):
     `message`
         String message formatted by `format_message`. For different formatting
          derived from `Error`, change `format_message` and pass that as the
-         error_class when creating `Client`.
+         `error_class` when configuring your `Client`.
     `status_code`
         The HTTP status code associated with the response. This will always be
         present.

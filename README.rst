@@ -57,7 +57,7 @@ Lets work through an example. The code for this example is in ``example.py``.
 
     __version__ = '1.0'
     
-- Also define the configuration which all ``Client``s will use by default::
+- Also define the configuration which all ``Client``\s will use by default::
 
     default_config = wac.Config(None)
     
