@@ -136,13 +136,16 @@ class TestClient(TestCase):
         with patch.object(self.cli, 'config') as config:
             config.root_url = 'http://ex.com'
             config.auth = None
+            config.keep_alive = False
             config.allow_redirects = False
             config.headers = {
                 'X-Custom': 'rimz',
                 }
             self.cli._op(f, '/a/uri')
         f.assert_called_once_with(
-            'http://ex.com/a/uri', headers={'X-Custom': 'rimz'},
+            'http://ex.com/a/uri',
+            headers={'X-Custom': 'rimz'},
+            config={'keepalive': False},
             allow_redirects=False)
 
     @patch('wac.requests.get')
@@ -155,12 +158,14 @@ class TestClient(TestCase):
             config.root_url = 'http://ex.com'
             config.auth = ('bob', 'passwerd')
             config.headers = {}
+            config.keep_alive = False
             config.echo = False
             config.allow_redirects = False
             self.cli._op(f, '/a/uri')
         f.assert_called_once_with(
             'http://ex.com/a/uri',
             headers={},
+            config={'keepalive': False},
             auth=('bob', 'passwerd'),
             allow_redirects=False)
 
@@ -173,6 +178,7 @@ class TestClient(TestCase):
             config.root_url = 'http://ex.com'
             config.auth = None
             config.echo = False
+            config.keep_alive = True
             config.allow_redirects = False
             config.headers = {
                 'X-Custom': 'rimz',
@@ -181,6 +187,7 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={'X-Custom': 'rimz', 'Content-Type': 'application/json'},
+            config={'keepalive': True},
             allow_redirects=False,
             data='{"yo": "dawg"}')
 
@@ -194,12 +201,14 @@ class TestClient(TestCase):
             config.root_url = 'http://ex.com'
             config.auth = None
             config.echo = False
+            config.keep_alive = False
             config.headers = {}
             config.allow_redirects = False
             self.cli.get('/an/uri')
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={},
+            config={'keepalive': False},
             allow_redirects=False)
         self.assertEqual(response.data, {'hi': 'ya'})
 
@@ -212,12 +221,14 @@ class TestClient(TestCase):
             config.root_url = 'http://ex.com'
             config.auth = None
             config.echo = False
+            config.keep_alive = True
             config.headers = {}
             config.allow_redirects = False
             self.cli.get('/an/uri')
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={},
+            config={'keepalive': True},
             allow_redirects=False)
         self.assertFalse(response.data, None)
 
@@ -230,6 +241,7 @@ class TestClient(TestCase):
             config.root_url = 'http://ex.com'
             config.auth = None
             config.echo = False
+            config.keep_alive = True
             config.allow_redirects = False
             config.headers = {}
             with self.assertRaises(Exception) as ex_ctx:
@@ -239,6 +251,7 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={},
+            config={'keepalive': True},
             allow_redirects=False)
 
     def test_config_context(self):
@@ -357,6 +370,7 @@ class TestClient(TestCase):
             '/test/a/post/w/hooks',
             {'headers': {'Content-Type': 'application/json'},
              'allow_redirects': False,
+             'config': {'keepalive': False},
              'data': '{"hi": "ya"}',
              }
             )
@@ -380,6 +394,7 @@ class TestClient(TestCase):
         after_request = Mock()
         with self.cli:
             self.cli.config.root_url = '/test'
+            self.cli.config.keep_alive = False
             self.cli.config.before_request.append(before_request)
             self.cli.config.after_request.append(after_request)
             with self.assertRaises(wac.Error) as ex_ctx:
@@ -390,6 +405,7 @@ class TestClient(TestCase):
             'POST',
             '/test/a/post/w/hooks',
             {'headers': {'Content-Type': 'application/json'},
+             'config': {'keepalive': False},
              'allow_redirects': False,
              'data': '{"hi": "ya"}',
              }
@@ -406,6 +422,7 @@ class TestPage(TestCase):
             config.root_url = 'http://ex.com'
             config.echo = False
             config.allow_redirects = False
+            config.keep_alive = True
             config.auth = ('bob', 'passwerd')
             response = get.return_value
             data = {
@@ -433,6 +450,7 @@ class TestPage(TestCase):
             'http://ex.com/a/uri',
             headers={},
             auth=('bob', 'passwerd'),
+            config={'keepalive': True},
             allow_redirects=False)
         self.assertTrue(fetched1 is fetched2)
         self.assertItemsEqual(
@@ -455,6 +473,7 @@ class TestPage(TestCase):
             config.echo = False
             config.allow_redirects = False
             config.auth = ('bob', 'passwerd')
+            config.keep_alive = False
 
             response = get.return_value
             data = {
@@ -490,6 +509,7 @@ class TestPage(TestCase):
             get.assert_called_once_with(
                 'http://ex.com/a/uri',
                 headers={},
+                config={'keepalive': False},
                 auth=('bob', 'passwerd'),
                 allow_redirects=False)
 
@@ -528,7 +548,8 @@ class TestPage(TestCase):
                 'http://ex.com/a/uri',
                 headers={},
                 auth=('bob', 'passwerd'),
-                allow_redirects=False)
+                allow_redirects=False,
+                config={'keepalive': False})
 
 
 class TestPagination(TestCase):

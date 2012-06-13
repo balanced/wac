@@ -16,7 +16,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.5'
+__version__ = '0.6'
 
 __all__ = [
     'Config',
@@ -141,6 +141,9 @@ class Config(object):
         be called. On the other hand if the requests fails for connection
         reasons (e.g. timeout) `after_request` callables are not called since
         we don't have a response.
+    `keep_alive`
+        Flag indicating whether connections should be reused. Defaults to
+        False.
     """
 
     def __init__(self,
@@ -151,7 +154,8 @@ class Config(object):
             headers=None,
             echo=False,
             allow_redirects=False,
-            error_class=None):
+            error_class=None,
+            keep_alive=False):
         self.reset(
             root_url,
             client_agent=client_agent,
@@ -160,7 +164,8 @@ class Config(object):
             headers=headers,
             echo=echo,
             allow_redirects=allow_redirects,
-            error_class=error_class)
+            error_class=error_class,
+            keep_alive=keep_alive)
 
     def reset(self,
             root_url,
@@ -170,7 +175,8 @@ class Config(object):
             headers=None,
             echo=False,
             allow_redirects=False,
-            error_class=None):
+            error_class=None,
+            keep_alive=False):
         headers = headers or {}
         self.root_url = root_url.rstrip('/') if root_url else None
         user_agent = ' '.join(p for p in [client_agent, user_agent] if p)
@@ -182,6 +188,7 @@ class Config(object):
         self.error_class = error_class or Error
         self.before_request = []
         self.after_request = []
+        self.keep_alive = keep_alive
         if echo:
             self.before_request.append(Config._echo_request)
             self.after_request.append(Config._echo_response)
@@ -314,7 +321,7 @@ class Client(threading.local, object):
     __metaclass__ = abc.ABCMeta
     config = None
 
-    def __init__(self, error_class=None):
+    def __init__(self):
         super(Client, self).__init__()
         self._configs = []
 
@@ -338,9 +345,11 @@ class Client(threading.local, object):
 
     def _op(self, f, uri, **kwargs):
         kwargs.setdefault('headers', {})
+        kwargs.setdefault('config', {})
         kwargs['headers'].update(self.config.headers)
         kwargs.setdefault('allow_redirects', self.config.allow_redirects)
-
+        if 'keep_alive' not in kwargs['config']:
+            kwargs['config']['keepalive'] = self.config.keep_alive
         if self.config.auth:
             kwargs['auth'] = self.config.auth
 
