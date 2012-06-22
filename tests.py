@@ -420,11 +420,10 @@ class TestClient(TestCase):
     def test_keep_alive(self, op, session):
         ka_client = wac.Client()
         ka_client.config = default_config
-        ka_client.config.root_url = 'https://google.com'
-        ka_client.get('/poop')
+        ka_client.config.root_url = 'https://www.google.com'
+        ka_client.get('/grapes')
         args, _ = op.call_args
-        self.assertEqual(args,
-                         (session.return_value.get, '/poop'))
+        self.assertEqual(args, (session.return_value.get, '/grapes'))
 
 
 class TestPage(TestCase):
