@@ -321,27 +321,28 @@ class Client(threading.local, object):
     __metaclass__ = abc.ABCMeta
     config = None
 
-    def __init__(self):
+    def __init__(self, keep_alive=True):
         super(Client, self).__init__()
+        self.interface = requests.session() if keep_alive else requests
         self._configs = []
 
     def get(self, uri, **kwargs):
-        return self._op(requests.get, uri, **kwargs)
+        return self._op(self.interface.get, uri, **kwargs)
 
     def post(self, uri, data=None, **kwargs):
         mime_type, data = self._serialize(data)
         kwargs.setdefault('headers', {})
         kwargs['headers']['Content-Type'] = mime_type
-        return self._op(requests.post, uri, data=data, **kwargs)
+        return self._op(self.interface.post, uri, data=data, **kwargs)
 
     def put(self, uri, data=None, **kwargs):
         mime_type, data = self._serialize(data)
         kwargs.setdefault('headers', {})
         kwargs['headers']['Content-Type'] = mime_type
-        return self._op(requests.put, uri, data=data, **kwargs)
+        return self._op(self.interface.put, uri, data=data, **kwargs)
 
     def delete(self, uri, **kwargs):
-        return self._op(requests.delete, uri, **kwargs)
+        return self._op(self.interface.delete, uri, **kwargs)
 
     def _op(self, f, uri, **kwargs):
         kwargs.setdefault('headers', {})
