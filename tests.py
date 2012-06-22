@@ -415,6 +415,17 @@ class TestClient(TestCase):
             )
         after_request.assert_called_once_with(ex.response)
 
+    @patch('requests.session')
+    @patch('wac.Client._op')
+    def test_keep_alive(self, op, session):
+        ka_client = wac.Client()
+        ka_client.config = default_config
+        ka_client.config.root_url = 'https://google.com'
+        ka_client.get('/poop')
+        args, _ = op.call_args
+        self.assertEqual(args,
+                         (session.return_value.get, '/poop'))
+
 
 class TestPage(TestCase):
 
