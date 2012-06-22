@@ -36,6 +36,9 @@ class Client(wac.Client):
 
     config = default_config
 
+    def __init__(self):
+        super(Client, self).__init__(keep_alive=False)
+
     def _serialize(self, data):
         return 'application/json', json.dumps(data)
 

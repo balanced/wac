@@ -321,8 +321,9 @@ class Client(threading.local, object):
     __metaclass__ = abc.ABCMeta
     config = None
 
-    def __init__(self):
+    def __init__(self, keep_alive=True):
         super(Client, self).__init__()
+        self.interface = requests.session() if keep_alive else requests
         self._configs = []
 
     def get(self, uri, **kwargs):
