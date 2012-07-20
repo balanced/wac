@@ -3,6 +3,7 @@ wac
 ===
 
 .. image:: https://secure.travis-ci.org/bninja/wac.png?branch=master
+    :target: http://travis-ci.org/bninja/wac
 
 To write a friendly client for a RESTful API you typically end up doing the
 following:

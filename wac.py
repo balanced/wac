@@ -446,9 +446,9 @@ class Page(object):
     Note that page data is lazily fetched on first access.
     """
 
-    def __init__(self, uri, resource, data=None):
-        self.uri = uri
+    def __init__(self, resource, uri, data=None):
         self.resource = resource
+        self.uri = uri
         self._page = data
         if self._page is not None:
             self._page['items'] = [
@@ -502,22 +502,22 @@ class Page(object):
     @property
     def first(self):
         uri = self.fetch()['first_uri']
-        return Page(uri, self.resource)
+        return Page(self.resource, uri)
 
     @property
     def previous(self):
         uri = self.fetch()['previous_uri']
-        return Page(uri, self.resource) if uri else None
+        return Page(self.resource, uri) if uri else None
 
     @property
     def next(self):
         uri = self.fetch()['next_uri']
-        return Page(uri, self.resource) if uri else None
+        return Page(self.resource, uri) if uri else None
 
     @property
     def last(self):
         uri = self.fetch()['last_uri']
-        return Page(uri, self.resource)
+        return Page(self.resource, uri)
 
 
 class Pagination(object):

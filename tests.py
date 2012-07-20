@@ -455,7 +455,7 @@ class TestPage(TestCase):
                 'Content-Type': 'application/json',
                 }
             response.content = to_json(data)
-            page = wac.Page('/a/uri', Resource)
+            page = wac.Page(Resource, '/a/uri')
             fetched1 = page.fetch()
             fetched2 = page.fetch()
 
@@ -504,7 +504,7 @@ class TestPage(TestCase):
                 'Content-Type': 'application/json',
                 }
             response.content = to_json(data)
-            page = wac.Page('/a/uri', Resource)
+            page = wac.Page(Resource, '/a/uri')
 
             link = page.first
             self.assertEqual(link.uri, '/a/uri/first')
@@ -544,7 +544,7 @@ class TestPage(TestCase):
                 'Content-Type': 'application/json',
                 }
             response.content = to_json(data)
-            page = wac.Page('/a/uri', Resource)
+            page = wac.Page(Resource, '/a/uri')
 
             link = page.first
             self.assertEqual(link.uri, '/a/uri/first')
