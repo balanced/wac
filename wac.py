@@ -528,34 +528,63 @@ class Pagination(object):
         The class representing this endpoints resources.
     `uri`
         URI for the endpoint.
-    `size`
-        The number of items in each page.
+    `default_size`
+        Default number of items in each page. If a limit parameter is not
+        present in `uri` then this default value will be used.
     `current`
-        The current page as a `Page` object. Defaults to the first page.
+        Page data as a dict for the current page if available.
 
     The standard sequence indexing and slicing protocols are supported.
     """
 
-    def __init__(self, resource, uri, size, current=None):
+    def __init__(self, resource, uri, default_size=10, current=None):
         self.resource = resource
-        self.size = size
-        self.uri = self._parse_uri(uri, size)
-        self.current = current or self._page(0)
+        self.uri, limit, offset = self._parse_uri(uri)
+        self.size = limit or default_size
+        self.current = self._page(int(offset / self.size), data=current)
 
     @staticmethod
-    def _parse_uri(uri, size):
-        uri, _, qs = uri.partition('?')
+    def _parse_uri(uri):
+        uri_no_qs, _, qs = uri.partition('?')
         parsed_qs = urlparse.parse_qs(qs)
-        if 'limit' in parsed_qs:
-            raise ValueError('uri has unexpected limit parameter')
-        if 'offset' in parsed_qs:
-            raise ValueError('uri has unexpected offset parameter')
-        uri = uri + '?' + qs
-        if qs:
-            uri += '&'
-        return uri
 
-    def _page(self, key, size=None):
+        limit = None
+        if 'limit' in parsed_qs:
+            if len(parsed_qs['limit']) > 1:
+                raise ValueError(
+                    'URI "{}" has multiple limit parameters "{}"'.format(
+                    uri, parsed_qs['limit'][0]))
+            limit = parsed_qs['limit'][0]
+            try:
+                limit = int(limit)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    'URI "{}" has non-integer limit parameter "{}"'.format(
+                    uri, limit))
+            parsed_qs.pop('limit')
+
+        offset = 0
+        if 'offset' in parsed_qs:
+            if len(parsed_qs['offset']) > 1:
+                raise ValueError(
+                    'URI "{}" has multiple offset parameters'.format(uri))
+            offset = parsed_qs['offset'][0]
+            try:
+                offset = int(offset)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    'URI "{}" has non-integer offset parameter "{}"'.format(
+                    uri, offset))
+            parsed_qs.pop('offset')
+
+        qs = urllib.urlencode(parsed_qs, doseq=True)
+        uri = uri_no_qs + '?'
+        if qs:
+            uri += qs + '&'
+
+        return uri, limit, offset
+
+    def _page(self, key, size=None, data=None):
         size = size or self.size
         qs = [
             ('limit', self.size),
@@ -563,7 +592,7 @@ class Pagination(object):
             ]
         qs = urllib.urlencode(qs, doseq=True)
         uri = self.uri + qs
-        return Page(self.resource, uri)
+        return Page(self.resource, uri, data)
 
     def count(self):
         if self.current.fetched:
@@ -872,6 +901,7 @@ class Query(PaginationMixin):
             if not isinstance(values, (list, tuple)):
                 values = [values]
             f = (f, ','.join(str(v) for v in values))
+            self.filters.append(f)
         self._pagination = None  # invalidate pagination
         return self
 
@@ -942,6 +972,7 @@ class URISpec(object):
         self.page_size = page_size
 
     def match(self, uri):
+        uri = uri.partition('?')[0].rstrip('/')
         if uri.endswith(self.collection):
             return True, {'collection': True, 'page_size': self.page_size}
         t = uri
@@ -1248,7 +1279,7 @@ class ResourceCollection(PaginationMixin):
         super(ResourceCollection, self).__init__()
         self.resource = resource
         self.uri = uri
-        self.pagination = Pagination(resource, uri, page_size, (0, page))
+        self.pagination = Pagination(resource, uri, page_size, page)
 
     def create(self, **kwargs):
         resp = self.resource.client.post(self.uri, data=kwargs)

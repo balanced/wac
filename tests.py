@@ -609,27 +609,23 @@ class TestPagination(TestCase):
         page1_unfetched = Mock(fetched=False)
         page1_fetched = Mock(items=[1, 2, 3], total=8, fetched=True)
 
-        def _page_patch(key, size=None):
+        def _page_patch(key, size=None, data=None):
             return [page1_fetched][key]
 
         _page.side_effect = _page_patch
 
         uri = '/a/uri'
-        pagination = wac.Pagination(None, uri, 6, page1_unfetched)
+        pagination = wac.Pagination(None, uri, 6, None)
         expected_count = int(math.ceil(page1_fetched.total / pagination.size))
         self.assertEqual(pagination.count(), expected_count)
-        _page.assert_called_once_with(0, 1)
+        _page.assert_called_once_with(0, data=None)
 
-    @patch.object(wac.Pagination, '_page')
-    @patch('wac.Page')
-    def test_count_cached(self, Page, _page):
-        page1 = Mock(total=101, fetched=True)
-        Page.return_value = page1
+    def test_count_cached(self):
+        page1 = dict(total=101, items=[])
         uri = '/a/uri'
         pagination = wac.Pagination(None, uri, 6, page1)
-        expected_count = int(math.ceil(page1.total / pagination.size))
+        expected_count = int(math.ceil(page1['total'] / pagination.size))
         self.assertEqual(pagination.count(), expected_count)
-        self.assertEqual(_page.call_count, 0)
 
     @patch.object(wac.Pagination, '_page')
     def test_index(self, _page):
@@ -637,7 +633,7 @@ class TestPagination(TestCase):
         page2 = Mock(items=[4, 5, 6], total=8)
         page3 = Mock(items=[7, 8], total=8)
 
-        def _page_patch(key):
+        def _page_patch(key, data=None):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
@@ -666,16 +662,17 @@ class TestPagination(TestCase):
     @patch.object(wac.Pagination, '_page')
     def test_slice(self, _page):
         page1 = Mock(items=[1, 2, 3], total=8)
-        page2 = Mock(items=[4, 5, 6], total=8)
+        page2_data = dict(items=[4, 5, 6], total=8)
+        page2 = Mock(**page2_data)
         page3 = Mock(items=[7, 8], total=8)
 
-        def _page_patch(key):
+        def _page_patch(key, data=None):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
 
-        uri = '/a/uri'
-        pagination = wac.Pagination(None, uri, 3, page2)
+        uri = '/a/uri?offset=4'
+        pagination = wac.Pagination(None, uri, 3, page2_data)
         self.assertEqual(pagination.current, page2)
 
         pages = [page1, page2, page3]
@@ -707,15 +704,16 @@ class TestPagination(TestCase):
         pages = [p for p in pagination]
         self.assertEqual([page1, page2, page3, page4], pages)
 
+        Page.return_value = page2
         uri = '/a/uri'
-        pagination = wac.Pagination(None, uri, 25, page2)
+        pagination = wac.Pagination(None, uri, 25)
         pages = [p for p in pagination]
         self.assertEqual([page2, page3, page4], pages)
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):
 
-        def _page_patch(key):
+        def _page_patch(key, data=None):
             return pages[key]
 
         _page.side_effect = _page_patch
@@ -809,7 +807,7 @@ class TestQuery(TestCase):
         page3.previous = page2
         page3.next = None
 
-        def _page_patch(key):
+        def _page_patch(key, data=None):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
@@ -824,7 +822,7 @@ class TestQuery(TestCase):
     @patch.object(wac.Pagination, '_page')
     def test_one(self, _page):
 
-        def _page_patch(key, size=None):
+        def _page_patch(key, size=None, data=None):
             return pages[key]
 
         _page.side_effect = _page_patch
@@ -870,7 +868,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.NoResultFound):
             q.one()
-        _page.assert_called_once_with(0)
+        _page.assert_called_once_with(0, data=None)
 
         # multiple
         page = Mock(items=[1, 2, 3], offset=0, total=3, fetched=True)
@@ -880,7 +878,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.MultipleResultsFound):
             q.one()
-        _page.assert_called_once_with(0)
+        _page.assert_called_once_with(0, data=None)
 
         # one
         page = Mock(items=['one'], offset=0, total=1, fetched=True)
@@ -890,7 +888,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         item = q.one()
         self.assertEqual(item, 'one')
-        _page.assert_called_once_with(0)
+        _page.assert_called_once_with(0, data=None)
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):
@@ -904,7 +902,7 @@ class TestQuery(TestCase):
         page3.previous = page2
         page3.next = None
 
-        def _page_patch(key, size=None):
+        def _page_patch(key, size=None, data=None):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
@@ -931,7 +929,7 @@ class TestQuery(TestCase):
     def test_count(self, Page, _page):
         page1 = Mock(items=[1, 2, 3], total=8)
 
-        def _page_patch(key):
+        def _page_patch(key, data=None):
             return [page1][key]
 
         _page.side_effect = _page_patch
@@ -948,7 +946,7 @@ class TestQuery(TestCase):
         page2 = Mock(items=[4, 5, 6], total=8)
         page3 = Mock(items=[7, 8], total=8)
 
-        def _page_patch(key):
+        def _page_patch(key, data=None):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
@@ -965,7 +963,7 @@ class TestQuery(TestCase):
         page2 = Mock(items=[4, 5, 6], total=8)
         page3 = Mock(items=[7, 8], total=8)
 
-        def _page_patch(key):
+        def _page_patch(key, data=None):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
