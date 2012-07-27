@@ -1,8 +1,9 @@
 from __future__ import division
 from __future__ import unicode_literals
+
 import json
 import math
-import unittest
+import unittest2 as unittest
 import urllib
 
 from mock import Mock, patch
@@ -44,7 +45,7 @@ class Client(wac.Client):
 
     def _deserialize(self, response):
         if response.headers['Content-Type'] != 'application/json':
-            raise Exception("Unsupported content-type '{}'"
+            raise Exception("Unsupported content-type '{0}'"
                 .format(response.headers['Content-Type']))
         data = json.loads(response.content)
         return data

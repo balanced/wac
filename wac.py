@@ -232,10 +232,10 @@ class Error(requests.HTTPError):
 
     def __repr__(self):
         attrs = ', '.join([
-           '{}={}'.format(k, repr(v))
+           '{0}={1}'.format(k, repr(v))
            for k, v in self.__dict__.iteritems()
            ])
-        return '{}({})'.format(self.__class__.__name__, attrs)
+        return '{0}({1})'.format(self.__class__.__name__, attrs)
 
     @classmethod
     def format_message(cls, requests_ex):
@@ -457,13 +457,13 @@ class Page(object):
 
     def __repr__(self):
         attrs = ', '.join(
-            '{}={}'.format(k, v)
+            '{0}={1}'.format(k, v)
             for k, v in [
                 ('uri', self.uri),
                 ('qs', self.qs),
                 ('resource', self.resource),
                 ])
-        return '{}({})'.format('Page', attrs)
+        return '{0}({1})'.format('Page', attrs)
 
     def fetch(self):
         if not self.fetched:
@@ -552,14 +552,14 @@ class Pagination(object):
         if 'limit' in parsed_qs:
             if len(parsed_qs['limit']) > 1:
                 raise ValueError(
-                    'URI "{}" has multiple limit parameters "{}"'.format(
+                    'URI "{0}" has multiple limit parameters "{1}"'.format(
                     uri, parsed_qs['limit'][0]))
             limit = parsed_qs['limit'][0]
             try:
                 limit = int(limit)
             except (TypeError, ValueError):
                 raise ValueError(
-                    'URI "{}" has non-integer limit parameter "{}"'.format(
+                    'URI "{0}" has non-integer limit parameter "{1}"'.format(
                     uri, limit))
             parsed_qs.pop('limit')
 
@@ -567,13 +567,13 @@ class Pagination(object):
         if 'offset' in parsed_qs:
             if len(parsed_qs['offset']) > 1:
                 raise ValueError(
-                    'URI "{}" has multiple offset parameters'.format(uri))
+                    'URI "{0}" has multiple offset parameters'.format(uri))
             offset = parsed_qs['offset'][0]
             try:
                 offset = int(offset)
             except (TypeError, ValueError):
                 raise ValueError(
-                    'URI "{}" has non-integer offset parameter "{}"'.format(
+                    'URI "{0}" has non-integer offset parameter "{1}"'.format(
                     uri, offset))
             parsed_qs.pop('offset')
 
@@ -663,7 +663,7 @@ class Pagination(object):
         elif isinstance(key, int):
             return self._index(key)
         else:
-            raise TypeError('indices must be integers, not {}'.format(
+            raise TypeError('indices must be integers, not {0}'.format(
                 type(key)))
 
 
@@ -757,7 +757,7 @@ class PaginationMixin(object):
         elif isinstance(key, int):
             return self._index(key)
         else:
-            raise TypeError('indices must be integers, not {}'.format(
+            raise TypeError('indices must be integers, not {0}'.format(
                 type(key)))
 
 
@@ -794,11 +794,11 @@ class FilterExpression(object):
 
     def __invert__(self):
         if self.inv_op is None:
-            raise TypeError('"{}" cannot be inverted', self)
+            raise TypeError('"{0}" cannot be inverted', self)
         return FilterExpression(self.field, self.inv_op, self.value, self.op)
 
     def __str__(self):
-        return '{} {} {}'.format(
+        return '{0} {1} {2}'.format(
             self.field.name, self.field.op, self.field.values)
 
 
@@ -870,8 +870,8 @@ class Query(PaginationMixin):
                 elif k == 'limit':
                     page_size = int(v)
                     if page_size < 0:
-                        raise ValueError('uri page_size {} must be > 0'.format(
-                            page_size))
+                        raise ValueError(
+                            'uri page_size {0} must be > 0'.format(page_size))
                 else:
                     filters.append((k, v))
         return uri, filters, sorts, page_size
@@ -885,19 +885,19 @@ class Query(PaginationMixin):
     def filter(self, *args, **kwargs):
         for expression in args:
             if not isinstance(expression, FilterExpression):
-                raise ValueError('"{}" is not a FilterExpression'.format(
+                raise ValueError('"{0}" is not a FilterExpression'.format(
                     expression))
             if expression.op == '=':
-                f = '{}'.format(expression.field.name)
+                f = '{0}'.format(expression.field.name)
             else:
-                f = '{}[{}]'.format(expression.field.name, expression.op)
+                f = '{0}[{1}]'.format(expression.field.name, expression.op)
             values = expression.value
             if not isinstance(values, (list, tuple)):
                 values = [values]
             f = (f, ','.join(str(v) for v in values))
             self.filters.append(f)
         for k, values in kwargs.iteritems():
-            f = '{}'.format(k)
+            f = '{0}'.format(k)
             if not isinstance(values, (list, tuple)):
                 values = [values]
             f = (f, ','.join(str(v) for v in values))
@@ -908,9 +908,9 @@ class Query(PaginationMixin):
     def sort(self, *args):
         for expression in args:
             if not isinstance(expression, SortExpression):
-                raise ValueError('"{}" is not a SortExpression'.format(
+                raise ValueError('"{0}" is not a SortExpression'.format(
                     expression))
-            v = '{},{}'.format(
+            v = '{0},{1}'.format(
                 expression.field.name,
                 'asc' if expression.ascending else 'desc')
             self.sorts.append(('sort', v))
@@ -1012,7 +1012,7 @@ class ResourceRegistry(dict):
             matched, flags = spec.match(uri)
             if matched:
                 return resource_cls, flags
-        raise LookupError("No resource with uri spec matching '{}'"
+        raise LookupError("No resource with uri spec matching '{0}'"
             .format(uri))
 
 
@@ -1022,7 +1022,7 @@ class _ResourceField(object):
         self.name = name
 
     def __getattr__(self, name):
-        return _ResourceField('{}.{}'.format(self.name, name))
+        return _ResourceField('{0}.{1}'.format(self.name, name))
 
     def asc(self):
         return SortExpression(self, ascending=True)
@@ -1156,10 +1156,10 @@ class Resource(object):
 
     def __repr__(self):
         attrs = ', '.join([
-            '{}={}'.format(k, repr(v))
+            '{0}={1}'.format(k, repr(v))
             for k, v in self.__dict__.iteritems()
             ])
-        return '{}({})'.format(self.__class__.__name__, attrs)
+        return '{0}({1})'.format(self.__class__.__name__, attrs)
 
     def _attach_property(self, new_key, key):
 
@@ -1214,7 +1214,7 @@ class Resource(object):
     @classproperty
     def query(cls):
         if not hasattr(cls.uri_spec, 'collection_uri'):
-            raise TypeError('Unable to query {} resources directly'
+            raise TypeError('Unable to query {0} resources directly'
                 .format(cls.__name__))
         page_size = cls.uri_spec.page_size
         return Query(cls, cls.uri_spec.collection_uri, page_size=page_size)
@@ -1230,7 +1230,7 @@ class Resource(object):
 
         if not uri:
             if not hasattr(self.uri_spec, 'collection_uri'):
-                raise TypeError('Unable to create {} resources directly'
+                raise TypeError('Unable to create {0} resources directly'
                     .format(self.__class__.__name__))
             method = self.client.post
             uri = self.uri_spec.collection_uri

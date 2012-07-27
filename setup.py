@@ -31,6 +31,7 @@ setup(
         'nose==1.1.2',
         'mock==0.8',
         'simplejson >= 2.1',
+        'unitest2 >= 0.5.1',
         ],
     install_requires=[
         'certifi==0.0.8',  # force requests optional
