@@ -18,6 +18,7 @@ pip-log.txt
 
 # unit test / coverage reports
 .coverage
+.tox
 
 # sphnix
 docs/_build
