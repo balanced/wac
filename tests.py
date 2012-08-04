@@ -1118,8 +1118,36 @@ class TestResource(TestCase):
 
     @patch('wac.Client._op')
     def test_get(self, _op):
-        Resource1.get('gooid')
-        _op.assert_called_once_with(wac.requests.get, 'gooid')
+        Resource1.get('/v2/1s/gooid')
+        _op.assert_called_once_with(wac.requests.get, '/v2/1s/gooid')
+
+    @patch('wac.Client._op')
+    def test_get_collection(self, _op):
+        with self.assertRaises(ValueError) as ex_ctx:
+            Resource1.get('/v2/1s')
+        self.assertIn('', ex_ctx.exception)
+
+    @patch('wac.Client._op')
+    def test_get_collection(self, _op):
+        with self.assertRaises(ValueError) as ex_ctx:
+            Resource1.get('/v2/1s')
+        self.assertIn(
+            "'/v2/1s' resolves to a Resource1 collection",
+            str(ex_ctx.exception))
+
+    @patch('wac.Client._op')
+    def test_get_member_mismatch(self, _op):
+        with self.assertRaises(ValueError) as ex_ctx:
+            Resource1.get('/v2/2s/id')
+        self.assertIn(
+            "'/v2/2s/id' resolves to a Resource2 member which is not a "
+            "subclass of Resource1",
+            ex_ctx.exception)
+
+    @patch('wac.Client._op')
+    def test_get_member_base(self, _op):
+        Resource.get('/v2/1s/gooid')
+        _op.assert_called_once_with(wac.requests.get, '/v2/1s/gooid')
 
     @patch('wac.Client._op')
     def test_create_from_save(self, _op):

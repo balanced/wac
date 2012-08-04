@@ -1221,6 +1221,14 @@ class Resource(object):
 
     @classmethod
     def get(cls, uri):
+        resource, flags = cls.registry.match(uri)
+        if flags.get('collection', False):
+            raise ValueError("'{0}' resolves to a {1} collection".format(
+                uri, resource.__name__))
+        if not issubclass(resource, cls):
+            raise ValueError(
+                "'{0}' resolves to a {1} member which is not a subclass of {2}"
+                .format(uri, resource.__name__, cls.__name__))
         resp = cls.client.get(uri)
         return cls(**resp.data)
 
