@@ -3,7 +3,6 @@ Library for helping you write nice clients for RESTful APIs.
 """
 from __future__ import division
 import abc
-import copy
 import logging
 import math
 import pprint
@@ -202,6 +201,17 @@ class Config(object):
     def _echo_response(response):
         pprint.pprint(response.content)
 
+    def copy(self):
+        c = Config(self.root_url)
+        c.auth = self.auth
+        c.headers = self.headers.copy()
+        c.allow_redirects = self.allow_redirects
+        c.error_class = self.error_class
+        c.before_request = self.before_request[:]
+        c.after_request = self.after_request[:]
+        c.keep_alive = self.keep_alive
+        return c
+
 
 class Error(requests.HTTPError):
     """
@@ -395,7 +405,7 @@ class Client(threading.local, object):
 
     def __enter__(self):
         self._configs.append(self.config)
-        self.config = copy.deepcopy(self.config)
+        self.config = self.config.copy()
         return self
 
     def __exit__(self, type_, value, traceback):

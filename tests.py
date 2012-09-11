@@ -91,6 +91,20 @@ class TestConfig(TestCase):
         config = wac.Config('/fish/tanks/')
         self.assertEqual(config.root_url, '/fish/tanks')
 
+    def test_copy(self):
+        config = wac.Config(
+            '/fish/tanks/',
+            client_agent='cli',
+            user_agent='usah',
+            auth=('me', 'secret'),
+            headers={
+                'X-My-Header': 'interesting'
+            },
+            echo=True,
+            keep_alive=True)
+        config2 = config.copy()
+        self.assertDictEqual(config.__dict__, config2.__dict__)
+
 
 class TestClient(TestCase):
 
