@@ -1307,7 +1307,7 @@ class ResourceCollection(PaginationMixin):
 
     def filter(self, *args, **kwargs):
         q = Query(self.resource, self.uri, self.pagination.size)
-        q.fiter(*args, **kwargs)
+        q.filter(*args, **kwargs)
         return q
 
     def sort(self, *args):
