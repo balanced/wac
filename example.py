@@ -71,8 +71,8 @@ class Client(wac.Client):
 
     def _deserialize(self, response):
         if response.headers['Content-Type'] != 'application/json':
-            raise Exception("Unsupported content-type '{}'"
-                .format(response.headers['Content-Type']))
+            raise Exception("Unsupported content-type '{}'".format(
+                            response.headers['Content-Type']))
         data = json.loads(response.content)
         return self._parse_deserialized(data)
 
@@ -93,10 +93,8 @@ class Error(Exception):
             setattr(self, k, v)
 
     def __repr__(self):
-        attrs = ', '.join([
-           '{}={}'.format(k, repr(v))
-           for k, v in self.__dict__.iteritems()
-           ])
+        attrs = ', '.join(['{}={}'.format(k, repr(v))
+                           for k, v in self.__dict__.iteritems()])
         return '{}({}, {})'.format(
             self.__class__.__name__,
             ' '.join(self.args),

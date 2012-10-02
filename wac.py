@@ -27,7 +27,7 @@ __all__ = [
     'URISpec',
     'ResourceRegistry',
     'Resource',
-    ]
+]
 
 logger = logging.getLogger(__name__)
 
@@ -146,15 +146,15 @@ class Config(object):
     """
 
     def __init__(self,
-            root_url,
-            client_agent=None,
-            user_agent=None,
-            auth=None,
-            headers=None,
-            echo=False,
-            allow_redirects=False,
-            error_class=None,
-            keep_alive=False):
+                 root_url,
+                 client_agent=None,
+                 user_agent=None,
+                 auth=None,
+                 headers=None,
+                 echo=False,
+                 allow_redirects=False,
+                 error_class=None,
+                 keep_alive=False):
         self.reset(
             root_url,
             client_agent=client_agent,
@@ -167,15 +167,15 @@ class Config(object):
             keep_alive=keep_alive)
 
     def reset(self,
-            root_url,
-            client_agent=None,
-            user_agent=None,
-            auth=None,
-            headers=None,
-            echo=False,
-            allow_redirects=False,
-            error_class=None,
-            keep_alive=False):
+              root_url,
+              client_agent=None,
+              user_agent=None,
+              auth=None,
+              headers=None,
+              echo=False,
+              allow_redirects=False,
+              error_class=None,
+              keep_alive=False):
         headers = headers or {}
         self.root_url = root_url.rstrip('/') if root_url else None
         user_agent = ' '.join(p for p in [client_agent, user_agent] if p)
@@ -242,9 +242,9 @@ class Error(requests.HTTPError):
 
     def __repr__(self):
         attrs = ', '.join([
-           '{0}={1}'.format(k, repr(v))
-           for k, v in self.__dict__.iteritems()
-           ])
+                          '{0}={1}'.format(k, repr(v))
+                          for k, v in self.__dict__.iteritems()
+                          ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
     @classmethod
@@ -376,7 +376,7 @@ class Client(threading.local, object):
                 response.raise_for_status(kwargs['allow_redirects'])
         except requests.HTTPError, ex:
             if (kwargs.get('return_response', True) and
-                'Content-Type' in ex.response.headers):
+                    'Content-Type' in ex.response.headers):
                 ex.response.data = self._deserialize(ex.response)
             for handler in self.config.after_request:
                 handler(ex.response)
@@ -387,7 +387,7 @@ class Client(threading.local, object):
 
         response.data = None
         if (kwargs.get('return_response', True) and
-            'Content-Type' in response.headers):
+                'Content-Type' in response.headers):
             response.data = self._deserialize(response)
 
         for handler in self.config.after_request:
@@ -463,7 +463,7 @@ class Page(object):
         if self._page is not None:
             self._page['items'] = [
                 self.resource(**items) for items in self._page['items']
-                ]
+            ]
 
     def __repr__(self):
         attrs = ', '.join(
@@ -472,7 +472,7 @@ class Page(object):
                 ('uri', self.uri),
                 ('qs', self.qs),
                 ('resource', self.resource),
-                ])
+            ])
         return '{0}({1})'.format('Page', attrs)
 
     def fetch(self):
@@ -481,7 +481,7 @@ class Page(object):
             page = resp.data
             page['items'] = [
                 self.resource(**items) for items in page['items']
-                ]
+            ]
             self._page = page
         return self._page
 
@@ -599,7 +599,7 @@ class Pagination(object):
         qs = [
             ('limit', self.size),
             ('offset', key * self.size),
-            ]
+        ]
         qs = urllib.urlencode(qs, doseq=True)
         uri = self.uri + qs
         return Page(self.resource, uri, data)
@@ -646,9 +646,9 @@ class Pagination(object):
         return self.count()
 
     def _slice(self, key):
-        if (key.start != None and not isinstance(key.start, int) or
-            key.stop != None and not isinstance(key.stop, int) or
-            key.step != None and not isinstance(key.step, int)):
+        if (key.start is not None and not isinstance(key.start, int) or
+            key.stop is not None and not isinstance(key.stop, int) or
+                key.step is not None and not isinstance(key.step, int)):
             raise TypeError('slice indices must be integers or None')
         if key.step == 0:
             raise TypeError('slice step cannot be zero')
@@ -731,9 +731,9 @@ class PaginationMixin(object):
         return self.count()
 
     def _slice(self, key):
-        if (key.start != None and not isinstance(key.start, int) or
-            key.stop != None and not isinstance(key.stop, int) or
-            key.step != None and not isinstance(key.step, int)):
+        if (key.start is not None and not isinstance(key.start, int) or
+            key.stop is not None and not isinstance(key.stop, int) or
+                key.step is not None and not isinstance(key.step, int)):
             raise TypeError('slice indices must be integers or None')
         if key.step == 0:
             raise TypeError('slice step cannot be zero')
@@ -1023,7 +1023,7 @@ class ResourceRegistry(dict):
             if matched:
                 return resource_cls, flags
         raise LookupError("No resource with uri spec matching '{0}'"
-            .format(uri))
+                          .format(uri))
 
 
 class _ResourceField(object):
@@ -1168,7 +1168,7 @@ class Resource(object):
         attrs = ', '.join([
             '{0}={1}'.format(k, repr(v))
             for k, v in self.__dict__.iteritems()
-            ])
+        ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
     def _attach_property(self, new_key, key):
@@ -1225,7 +1225,7 @@ class Resource(object):
     def query(cls):
         if not hasattr(cls.uri_spec, 'collection_uri'):
             raise TypeError('Unable to query {0} resources directly'
-                .format(cls.__name__))
+                            .format(cls.__name__))
         page_size = cls.uri_spec.page_size
         return Query(cls, cls.uri_spec.collection_uri, page_size=page_size)
 
@@ -1249,7 +1249,7 @@ class Resource(object):
         if not uri:
             if not hasattr(self.uri_spec, 'collection_uri'):
                 raise TypeError('Unable to create {0} resources directly'
-                    .format(self.__class__.__name__))
+                                .format(self.__class__.__name__))
             method = self.client.post
             uri = self.uri_spec.collection_uri
         else:
@@ -1259,7 +1259,7 @@ class Resource(object):
             (k, v)
             for k, v in attrs.iteritems()
             if not isinstance(v, (Resource, ResourceCollection))
-            )
+        )
 
         response = method(uri, data=attrs)
 
