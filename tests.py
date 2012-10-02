@@ -1261,4 +1261,4 @@ class TestResourceCollection(TestCase):
     def test_filter(self):
         resources = wac.ResourceCollection(Resource3, '/some/3s', 25)
         q = resources.filter(Resource3.f.a.contains('b'))
-        self.assertEqual(q._qs(), 'a[contains]=b')
+        self.assertEqual(urllib.unquote(q._qs()), 'a[contains]=b')
