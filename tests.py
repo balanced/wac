@@ -1254,3 +1254,11 @@ class TestResource(TestCase):
         r = Resource1(uri='/v1/1s/eyedee', guid='eyedee')
         r.delete()
         _op.assert_called_once_with(wac.requests.delete, '/v1/1s/eyedee')
+
+
+class TestResourceCollection(TestCase):
+
+    def test_filter(self):
+        resources = wac.ResourceCollection(Resource3, '/some/3s', 25)
+        q = resources.filter(Resource3.f.a.contains('b'))
+        self.assertEqual(q._qs(), 'a[contains]=b')
