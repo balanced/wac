@@ -15,7 +15,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.11'
+__version__ = '0.12'
 
 __all__ = [
     'Config',
