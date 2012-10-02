@@ -1058,6 +1058,16 @@ class _ResourceField(object):
             raise ValueError('"contains" fragment must be a string')
         return FilterExpression(self, 'contains', fragment, '!contains')
 
+    def like(self, fragment):
+        if not isinstance(fragment, basestring):
+            raise ValueError('"like" fragment must be a string')
+        return FilterExpression(self, 'like', fragment, '!like')
+
+    def ilike(self, fragment):
+        if not isinstance(fragment, basestring):
+            raise ValueError('"ilike" fragment must be a string')
+        return FilterExpression(self, 'ilike', fragment, '!ilike')
+
     def __lt__(self, other):
         if isinstance(other, (list, tuple)):
             raise ValueError('"<" operand must be a single value')
