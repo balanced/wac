@@ -66,6 +66,19 @@ def classproperty(func):
     return _ClassPropertyDescriptor(func)
 
 
+def patch_httplib():
+    try:
+        from gevent import monkey
+    except ImportError:
+        raise RuntimeError('Gevent is required to use this feature!')
+    else:
+        # needed because requests (as of this comment) uses urllib3
+        # which builds on top of httplib, which is not patched by
+        # default when you use monkey.patch_all()
+        # see: http://www.gevent.org/gevent.monkey.html#gevent.monkey.patch_all
+        monkey.patch_all(httplib=True)
+
+
 # client
 
 class Config(object):
