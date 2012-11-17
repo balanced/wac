@@ -690,7 +690,7 @@ class PaginationMixin(object):
 
     def count(self):
         page = self.pagination.current
-        if page.feched:
+        if page.fetched:
             total = page.total
         else:
             total = self.pagination._page(0, 1).total
