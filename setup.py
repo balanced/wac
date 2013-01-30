@@ -36,7 +36,7 @@ setup(
     install_requires=[
         'certifi==0.0.8',  # force requests optional
         'chardet >= 1.0',  # force requests optional
-        'requests>=0.11',
+        'requests>=0.11,<1.0',
     ],
     test_suite='tests',
     classifiers=[
