@@ -12,9 +12,9 @@ else:
 setup(
     name='wac',
     version=(re
-        .compile(r".*__version__ = '(.*?)'", re.S)
-        .match(open('wac.py').read())
-        .group(1)),
+             .compile(r".*__version__ = '(.*?)'", re.S)
+             .match(open('wac.py').read())
+             .group(1)),
     url='https://github.com/bninja/wac/',
     license=open('LICENSE').read(),
     author='wac',
@@ -23,7 +23,7 @@ setup(
     long_description=(
         open('README.rst').read() + '\n\n' +
         open('HISTORY.rst').read()
-        ),
+    ),
     py_modules=['wac'],
     package_data={'': ['LICENSE']},
     include_package_data=True,
@@ -31,13 +31,13 @@ setup(
         'nose==1.1.2',
         'mock==0.8',
         'simplejson >= 2.1',
-        'unitest2 >= 0.5.1',
-        ],
+        'unittest2 >= 0.5.1',
+    ],
     install_requires=[
         'certifi==0.0.8',  # force requests optional
         'chardet >= 1.0',  # force requests optional
         'requests>=0.11',
-        ],
+    ],
     test_suite='tests',
     classifiers=[
         'Intended Audience :: Developers',
@@ -47,5 +47,5 @@ setup(
         'License :: OSI Approved :: ISC License (ISCL)',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
-        ],
-    )
+    ],
+)

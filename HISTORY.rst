@@ -3,6 +3,13 @@
 History
 -------
 
+0.12 (2012-10-02)
+++++++++++++++++++
+
+* Fix ResourceCollection.filter.
+* Add like and ilike filters.
+* Minor pep8/formatting changes.
+
 0.11 (2012-09-11)
 ++++++++++++++++++
 

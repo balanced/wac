@@ -46,7 +46,7 @@ class Client(wac.Client):
     def _deserialize(self, response):
         if response.headers['Content-Type'] != 'application/json':
             raise Exception("Unsupported content-type '{0}'"
-                .format(response.headers['Content-Type']))
+                            .format(response.headers['Content-Type']))
         data = json.loads(response.content)
         return data
 
@@ -134,8 +134,8 @@ class TestClient(TestCase):
         _op.assert_called_once_with(
             wac.requests.put,
             '/a/put',
-             headers={'Content-Type': 'application/json'},
-             data='{"hi": "ya"}')
+            headers={'Content-Type': 'application/json'},
+            data='{"hi": "ya"}')
 
     @patch('wac.Client._op')
     def test_delete(self, _op):
@@ -158,7 +158,7 @@ class TestClient(TestCase):
             config.allow_redirects = False
             config.headers = {
                 'X-Custom': 'rimz',
-                }
+            }
             self.cli._op(f, '/a/uri')
         f.assert_called_once_with(
             'http://ex.com/a/uri',
@@ -200,7 +200,7 @@ class TestClient(TestCase):
             config.allow_redirects = False
             config.headers = {
                 'X-Custom': 'rimz',
-                }
+            }
             self.cli.post('/an/uri', data={'yo': 'dawg'})
         f.assert_called_once_with(
             'http://ex.com/an/uri',
@@ -292,12 +292,13 @@ class TestClient(TestCase):
         ex = wac.requests.HTTPError()
         ex.response = Mock()
         ex.response.status_code = 402
-        ex.response.content = ('{"status": "Bad Request", "status_code": '
+        ex.response.content = (
+            '{"status": "Bad Request", "status_code": '
             '"400", "description": "Invalid field \'your mom\' -- make '
             'sure its your dad too", "additional": null}')
         ex.response.headers = {
             'Content-Type': 'application/json',
-            }
+        }
         _op.__name__ = 'get'
         _op.side_effect = ex
         with self.cli:
@@ -310,7 +311,7 @@ class TestClient(TestCase):
                 the_exception.args[0],
                 ("Bad Request: 400: Invalid field 'your mom' -- make sure its "
                  "your dad too")
-                )
+            )
 
     @patch('wac.requests.get')
     def test_custom_errors(self, _op):
@@ -342,10 +343,10 @@ class TestClient(TestCase):
             'status': '400 Bad Request',
             'status_code': '400',
             'additional': None,
-            }
+        }
         ex.response.headers = {
             'Content-Type': 'application/json',
-            }
+        }
         _op.__name__ = 'get'
         _op.side_effect = ex
 
@@ -391,7 +392,7 @@ class TestClient(TestCase):
              'config': {'keepalive': False},
              'data': '{"hi": "ya"}',
              }
-            )
+        )
         after_request.assert_called_once_with(response)
         self.assertDictEqual(result.data, {'bye': 'ya'})
 
@@ -400,12 +401,13 @@ class TestClient(TestCase):
         ex = wac.requests.HTTPError()
         ex.response = Mock()
         ex.response.status_code = 402
-        ex.response.content = ('{"status": "Bad Request", "status_code": '
+        ex.response.content = (
+            '{"status": "Bad Request", "status_code": '
             '"400", "description": "Invalid field \'your mom\' -- make '
             'sure its your dad too", "additional": "nothing personal"}')
         ex.response.headers = {
             'Content-Type': 'application/json',
-            }
+        }
         f.__name__ = 'post'
         f.side_effect = ex
         before_request = Mock()
@@ -427,7 +429,7 @@ class TestClient(TestCase):
              'allow_redirects': False,
              'data': '{"hi": "ya"}',
              }
-            )
+        )
         after_request.assert_called_once_with(ex.response)
 
     @patch('requests.session')
@@ -464,11 +466,11 @@ class TestPage(TestCase):
                 'items': [
                     {'a': 'b', 'one': 2},
                     {'a': 'c', 'one': 3},
-                    ],
-                }
+                ],
+            }
             response.headers = {
                 'Content-Type': 'application/json',
-                }
+            }
             response.content = to_json(data)
             page = wac.Page(Resource, '/a/uri')
             fetched1 = page.fetch()
@@ -489,7 +491,7 @@ class TestPage(TestCase):
         for k in [
             'first_uri', 'last_uri', 'limit', 'next_uri', 'offset',
             'previous_uri', 'total',
-            ]:
+        ]:
             self.assertEqual(fetched1[k], data[k])
         self.assertEqual(len(fetched1['items']), len(data['items']))
 
@@ -513,11 +515,11 @@ class TestPage(TestCase):
                 'offset': 44,
                 'limit': 2,
                 'items': [
-                    ],
-                }
+                ],
+            }
             response.headers = {
                 'Content-Type': 'application/json',
-                }
+            }
             response.content = to_json(data)
             page = wac.Page(Resource, '/a/uri')
 
@@ -553,11 +555,11 @@ class TestPage(TestCase):
                 'offset': 44,
                 'limit': 2,
                 'items': [
-                    ],
-                }
+                ],
+            }
             response.headers = {
                 'Content-Type': 'application/json',
-                }
+            }
             response.content = to_json(data)
             page = wac.Page(Resource, '/a/uri')
 
@@ -737,7 +739,7 @@ class TestPagination(TestCase):
         pages = [
             Mock(items=[1, 2, 3], total=5),
             Mock(items=[4, 5], total=5),
-            ]
+        ]
         uri = '/a/uri'
         pagination = wac.Pagination(None, uri, 3)
         with self.assertRaises(wac.MultipleResultsFound):
@@ -746,7 +748,7 @@ class TestPagination(TestCase):
         # one
         pages = [
             Mock(items=[1, 2, 3], total=3),
-            ]
+        ]
         uri = '/a/uri'
         pagination = wac.Pagination(None, uri, 3)
         self.assertEqual(pagination.one(), pages[0])
@@ -1034,7 +1036,7 @@ class TestURISpec(TestCase):
             ('/no/way', (False, {})),
             ('/no', (False, {})),
             ('no', (False, {})),
-            ]:
+        ]:
             self.assertEqual(spec.match(uri), expected)
 
     def test_composite_id(self):
@@ -1053,7 +1055,7 @@ class TestURISpec(TestCase):
             ('/no/way', (False, {})),
             ('/no', (False, {})),
             ('no', (False, {})),
-            ]:
+        ]:
             self.assertEqual(spec.match(uri), expected)
 
 
@@ -1068,10 +1070,10 @@ class TestResource(TestCase):
             'uri': '/v2/2s/idee',
             'name': 'zeek',
             'threes_uri': '/v1/3s',
-            },
+        },
         'one_3_uri': '/v1/3s/abc123',
         'more_3s_uri': '/v1/3s',
-        }
+    }
 
     def _objectify_equal(self, o):
         # o
@@ -1084,8 +1086,8 @@ class TestResource(TestCase):
              'one_3_uri',
              'more_3s_uri',
              ],
-             o.__dict__.keys(),
-            )
+            o.__dict__.keys(),
+        )
         self.assertEqual(o.hi, 'there')
         self.assertEqual(o.one, 2)
         self.assertEqual(o.apples, [1, 2, 3])
@@ -1101,7 +1103,7 @@ class TestResource(TestCase):
                 'one': 'two',
                 'two': 'shoes',
                 'ones_uri': '/v33/1s',
-                }
+            }
             self.assertItemsEqual(
                 o.one_3.__dict__.keys(),
                 ['ones_uri', 'two', 'one'])
@@ -1115,7 +1117,7 @@ class TestResource(TestCase):
              'threes_uri',
              ],
             o.two.__dict__,
-            )
+        )
         self.assertEqual(o.two.name, 'zeek')
         self.assertEqual(o.two.threes_uri, '/v1/3s')
         self.assertTrue(isinstance(o.two.threes, wac.ResourceCollection))
@@ -1170,14 +1172,14 @@ class TestResource(TestCase):
         self.assertEqual(
             _op.call_args[0],
             (wac.requests.post, '/v2/1s')
-            )
+        )
         self.assertEqual(_op.call_args[1].keys(), ['headers', 'data'])
         self.assertDictEqual(_op.call_args[1]['headers'], {
             'Content-Type': 'application/json'
-            })
+        })
         self.assertDictEqual(json.loads(_op.call_args[1]['data']), {
             'test': 'one', 'two': 3, 'three': True,
-            })
+        })
 
     @patch('wac.Client._op')
     def test_save(self, _op):
@@ -1217,14 +1219,14 @@ class TestResource(TestCase):
         data = {
             'ones_uri': '/v1/1s',
             'two_uri': '/v1/2s/id',
-            }
+        }
         r1 = Resource4(**data)
 
         data = {
             'ones_uri': '/v1/somthingelse/1s',
             'one_uri': '/v1/1s/eyedee',
             'two_uri': '/v1/2s/id'
-            }
+        }
         r2 = Resource4(**data)
 
         with self.assertRaises(AttributeError):
@@ -1245,12 +1247,20 @@ class TestResource(TestCase):
         Resource1(uri='/v1/1s/eyedee', guid='eyedee').save()
         _op.assert_called_once_with(
             wac.requests.put,
-             '/v1/1s/eyedee',
-             headers={'Content-Type': 'application/json'},
-             data='{"guid": "eyedee"}')
+            '/v1/1s/eyedee',
+            headers={'Content-Type': 'application/json'},
+            data='{"guid": "eyedee"}')
 
     @patch('wac.Client._op')
     def test_delete(self, _op):
         r = Resource1(uri='/v1/1s/eyedee', guid='eyedee')
         r.delete()
         _op.assert_called_once_with(wac.requests.delete, '/v1/1s/eyedee')
+
+
+class TestResourceCollection(TestCase):
+
+    def test_filter(self):
+        resources = wac.ResourceCollection(Resource3, '/some/3s', 25)
+        q = resources.filter(Resource3.f.a.ilike('b'))
+        self.assertEqual(urllib.unquote(q._qs()), 'a[ilike]=b')
