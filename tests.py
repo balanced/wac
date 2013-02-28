@@ -59,17 +59,19 @@ class Resource(wac.Resource):
 
 class Resource1(Resource):
 
-    uri_spec = wac.URISpec('1s', 'guid', root='/v2')
+    uri_spec = wac.URISpec('1s')
+
+    root_uri = '/v2/1s'
 
 
 class Resource2(Resource):
 
-    uri_spec = wac.URISpec('2s', 'sid')
+    uri_spec = wac.URISpec('2s')
 
 
 class Resource3(Resource):
 
-    uri_spec = wac.URISpec('3s', 'id')
+    uri_spec = wac.URISpec('3s')
 
 
 # tests
@@ -1020,18 +1022,18 @@ class TestQuery(TestCase):
 
 class TestURISpec(TestCase):
 
-    def test_single_id(self):
-        spec = wac.URISpec('as', 'id')
+    def test_single_member(self):
+        spec = wac.URISpec('as')
 
         class Resource(object):
             pass
 
         for uri, expected in [
-            ('/as', (True, {'collection': True, 'page_size': 25})),
-            ('/as/1', (True, {'collection': False, 'id': '1'})),
+            ('/as', (True, {'collection': True})),
+            ('/as/1', (True, {'collection': False, 'member': ('1',)})),
             ('/as/1/ababa', (False, {})),
-            ('/version1/as', (True, {'collection': True, 'page_size': 25})),
-            ('/version2/as/1', (True, {'collection': False, 'id': '1'})),
+            ('/version1/as', (True, {'collection': True})),
+            ('/version2/as/1', (True, {'collection': False, 'member': ('1',)})),
             ('/version3/as/1/ababa', (False, {})),
             ('/no/way', (False, {})),
             ('/no', (False, {})),
@@ -1039,24 +1041,38 @@ class TestURISpec(TestCase):
         ]:
             self.assertEqual(spec.match(uri), expected)
 
-    def test_composite_id(self):
-        spec = wac.URISpec('as', ('version', 'id'))
+    def test_composite_member(self):
+        spec = wac.URISpec('as', 2)
 
         for uri, expected in [
-            ('/as', (True, {'collection': True, 'page_size': 25})),
+            ('/as', (True, {'collection': True})),
             ('/as/1', (False, {})),
             ('/as/1/ababa',
-             (True, {'collection': False, 'id': '1', 'version': 'ababa'})),
-            ('/version1/as', (True, {'collection': True, 'page_size': 25})),
+             (True, {'collection': False, 'member': ('1', 'ababa')})),
+            ('/version1/as', (True, {'collection': True})),
             ('/version2/as/1', (False, {})),
             ('/version3/as/1/ababa',
-             (True, {'collection': False, 'id': '1', 'version': 'ababa'})),
+             (True, {'collection': False, 'member': ('1', 'ababa')})),
             ('/version3/as/1/aba/ba', (False, {})),
             ('/no/way', (False, {})),
             ('/no', (False, {})),
             ('no', (False, {})),
         ]:
             self.assertEqual(spec.match(uri), expected)
+
+    def test_parent(self):
+        tree_spec = wac.URISpec('trees')
+        apple_spec = wac.URISpec('apples', parent=tree_spec)
+
+        for uri, expected in [
+            ('/apples', (False, {})),
+            ('/barrles/123/apples', (False, {})),
+            ('/trees/abc/apples', (True, {'collection': True})),
+            ('/trees/abc/apples/xyz',
+             (True, {'collection': False, 'member': ('abc', 'xyz')})),
+        ]:
+            self.assertEqual(apple_spec.match(uri), expected)
+            self.assertEqual(tree_spec.match(uri), (False, {}))
 
 
 class TestResource(TestCase):
@@ -1130,7 +1146,7 @@ class TestResource(TestCase):
     def test_query(self):
         q = Resource1.query
         self.assertTrue(isinstance(q, wac.Query))
-        self.assertEqual(q.uri, Resource1.uri_spec.collection_uri)
+        self.assertEqual(q.uri, Resource1.root_uri)
 
     @patch('wac.Client._op')
     def test_get(self, _op):
@@ -1141,10 +1157,12 @@ class TestResource(TestCase):
     def test_get_collection(self, _op):
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/1s')
-        self.assertIn('', ex_ctx.exception)
+        self.assertIn(
+            "'/v2/1s' resolves to a Resource1 collection",
+            ex_ctx.exception)
 
     @patch('wac.Client._op')
-    def test_get_collection(self, _op):
+    def test_get_collection_lookup_failure(self, _op):
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/1s')
         self.assertIn(
@@ -1214,7 +1232,7 @@ class TestResource(TestCase):
     def test_objectify_uris(self, _op):
         class Resource4(Resource):
 
-            uri_spec = wac.URISpec('4s', 'guid')
+            uri_spec = wac.URISpec('4s')
 
         data = {
             'ones_uri': '/v1/1s',

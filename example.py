@@ -119,9 +119,11 @@ class Resource(wac.Resource):
 
 class Playlist(Resource):
 
-    uri_spec = wac.URISpec('playlists', 'guid', root='/v1')
+    uri_spec = wac.URISpec('playlists')
+
+    root_uri = '/v1/playlists'
 
 
 class Song(Resource):
 
-    uri_spec = wac.URISpec('songs', 'guid')
+    uri_spec = wac.URISpec('songs')

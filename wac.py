@@ -6,6 +6,7 @@ import abc
 import logging
 import math
 import pprint
+import re
 import threading
 import httplib
 import urllib
@@ -15,7 +16,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.14'
+__version__ = '0.15'
 
 __all__ = [
     'Config',
@@ -944,58 +945,46 @@ class Query(PaginationMixin):
 
 class URISpec(object):
     """
-    Defines a resource URI. This information is later used to match a uri
-    to a resource class.
+    Defines URI matching information for a resource. It is used to map a URIs
+    to resource classes.
 
     `collection`
-        The name of the resource collection as a string (e.g. "apples").
-    `ids`
-        The ids to consider when matching a member uri. If a single id then
-        this can simply be a string (e.g. "guid" or "id"). If a member uri
-        contains multiple ids then this should be a list of strings (e.g.
-        ["parent_guid", "guid"]).
-    `root`
-        Path to the root of this resource's collection endpoint. If None, the
-        default, there is no root collection endpoint for the resource. That
-        means you cannot perform certain top level queries or saves::
+        A string regex matching the resource collection (e.g. "apples") and is
+        used to match resource collections.
 
-                class MyResource(Resource)
+    `member`
+        Either an integer count of of the number of member id components
+        following the the collection (e.g. 2 results in a member regex
+        /\w+?/\w+?). Otherwise it should be a string regex.
 
-                    uri_spec = wac.URISpec('identities', 'guid', root='/v2')
+        The resulting regex is appended to the `collection` regex and is used
+        to match resource members.
 
-
-                MyResource.query  # fails
-                MyResource(a='123').save()  # fails
-    `page_size`
-        Default number of items in pages for this type of resource.
+    `parent`
+        Optional `URISpec` underwhich this is always sub-mounted (e.g. for
+        /trees/xyz/apples/123 you could pass the trees `URISpec` are the
+        `parent` to the apples `URISpec`).
     """
 
-    def __init__(self, collection, ids, root=None, page_size=25):
-        self.collection = collection
-        if isinstance(ids, basestring):
-            ids = [ids]
-        self.ids = ids
-        if root is not None:
-            self.collection_uri = root + '/' + collection
-        if page_size <= 0:
-            raise ValueError('page_size must be > 0')
-        self.page_size = page_size
+    member_re = r'(\w+?)'
+
+    def __init__(self, collection, member=1, parent=None):
+        self.collection_re = '/' + collection
+        if parent:
+            self.collection_re = parent.member_re + '/' + collection
+        if isinstance(member, int):
+            self.member_re = '/' + '/'.join([self.member_re] * member)
+        else:
+            self.member_re = '/' + member
+        self.member_re = self.collection_re + self.member_re
 
     def match(self, uri):
-        uri = uri.partition('?')[0].rstrip('/')
-        if uri.endswith(self.collection):
-            return True, {'collection': True, 'page_size': self.page_size}
-        t = uri
-        id_ = {}
-        for k in self.ids:
-            t, _, v = t.rpartition('/')
-            if v is None:
-                break
-            id_[k] = v
-        if t.endswith(self.collection):
-            flags = {'collection': False}
-            flags.update(id_)
-            return True, flags
+        m = re.search(self.member_re + '$', uri)
+        if m:
+            return True, {'collection': False, 'member': m.groups()}
+        m = re.search(self.collection_re + '$', uri)
+        if m:
+            return True, {'collection': True}
         return False, {}
 
 
@@ -1114,7 +1103,7 @@ class _ResourceMeta(type):
     def __new__(mcs, cls_name, cls_bases, cls_dict):
         cls = type.__new__(mcs, cls_name, cls_bases, cls_dict)
         cls.fields = cls.f = _ResourceFields()
-        if hasattr(cls, 'uri_spec'):
+        if getattr(cls, 'uri_spec', None):
             cls.registry[cls] = cls.uri_spec
         return cls
 
@@ -1122,7 +1111,18 @@ class _ResourceMeta(type):
 class Resource(object):
     """
     The core resource class. Any given URI addresses a type of resource and
-    this class the an object representation of that resource.
+    this class is the object representation of that resource.
+
+    `uri_spec`
+        A `URISpec`-like object that use used to match collections and members
+        of this resource. This is required.
+    `root_uri`
+        The URI string used to create top-level instances of this resource.
+        Defaults to None in which case you cannot create top-level instances
+        of this resource.
+    `page_size`
+        Default number of items to return when pagination a collection of
+        resouces. Defaults to 25.
 
     Typically a resource is very simple. You start by defining a base
     resource::
@@ -1136,19 +1136,23 @@ class Resource(object):
 
         class Playlist(Resource):
 
-            uri_spec = wac.URISpec('playlists', 'guid', root='/v1')
+            uri_spec = wac.URISpec('playlists')
+
+            root = '/v1/playlists'
 
 
         class Song(Resource):
 
-            uri_spec = wac.URISpec('songs', 'guid')
+            uri_spec = wac.URISpec('songs')
 
 
     You can add helper functions to your resource if you like::
 
         class Playlist(Resource):
 
-            uri_spec = wac.URISpec('playlists', 'guid', root='/v1')
+            uri_spec = wac.URISpec('playlists')
+
+            root_uri = '/v1/playlists'
 
             def play_them()
                 ...
@@ -1170,6 +1174,12 @@ class Resource(object):
 
     __metaclass__ = _ResourceMeta
 
+    uri_spec = None
+
+    root_uri = None
+
+    page_size = 25
+
     def __init__(self, **kwargs):
         super(Resource, self).__init__()
         self._objectify(**kwargs)
@@ -1186,18 +1196,21 @@ class Resource(object):
         def _load(self):
             uri = getattr(self, key)
             try:
-                resource, flags = self.registry.match(uri)
+                resource_cls, flags = self.registry.match(uri)
             except LookupError:
                 logger.warning(
-                    "Unable to determine resource for '%s' from '%s'. "
-                    "Make sure it is added in resources.py!", new_key, key)
+                    "Unable to determine resource for '%s' from '%s'.",
+                    new_key, key)
             else:
                 if not flags.get('collection', False):
-                    resp = resource.client.get(uri)
-                    return resource(**resp.data)
+                    resp = resource_cls.client.get(uri)
+                    return resource_cls(**resp.data)
                 else:
                     return ResourceCollection(
-                        resource, uri, flags['page_size'])
+                        resource_cls,
+                        uri,
+                        type(self).page_size,
+                    )
             return None
 
         if not hasattr(self.__class__, new_key):
@@ -1233,11 +1246,10 @@ class Resource(object):
 
     @classproperty
     def query(cls):
-        if not hasattr(cls.uri_spec, 'collection_uri'):
+        if not cls.root_uri:
             raise TypeError('Unable to query {0} resources directly'
                             .format(cls.__name__))
-        page_size = cls.uri_spec.page_size
-        return Query(cls, cls.uri_spec.collection_uri, page_size=page_size)
+        return Query(cls, cls.root_uri, page_size=cls.page_size)
 
     @classmethod
     def get(cls, uri):
@@ -1257,11 +1269,11 @@ class Resource(object):
         uri = attrs.pop('uri', None)
 
         if not uri:
-            if not hasattr(self.uri_spec, 'collection_uri'):
+            if not type(self).root_uri:
                 raise TypeError('Unable to create {0} resources directly'
                                 .format(self.__class__.__name__))
             method = self.client.post
-            uri = self.uri_spec.collection_uri
+            uri = type(self).root_uri
         else:
             method = self.client.put
 
