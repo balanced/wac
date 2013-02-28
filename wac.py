@@ -195,7 +195,6 @@ class Config(object):
 
     @staticmethod
     def _echo_request(method, url, **kwargs):
-        print url, method
         pprint.pprint(kwargs)
 
     @staticmethod
@@ -946,45 +945,93 @@ class Query(PaginationMixin):
 class URISpec(object):
     """
     Defines URI matching information for a resource. It is used to map a URIs
-    to resource classes.
+    to resource classes. If root information is provided URI generation can be
+    done as well as matching.
 
     `collection`
-        A string regex matching the resource collection (e.g. "apples") and is
-        used to match resource collections.
+        A collection URI fragment (e.g. apples or barrels/{barrel}/apples).
 
     `member`
-        Either an integer count of of the number of member id components
-        following the the collection (e.g. 2 results in a member regex
-        /\w+?/\w+?). Otherwise it should be a string regex.
-
-        The resulting regex is appended to the `collection` regex and is used
-        to match resource members.
+        A member URI fragment ({apples} or {one}/{two}).
 
     `parent`
-        Optional `URISpec` underwhich this is always sub-mounted (e.g. for
-        /trees/xyz/apples/123 you could pass the trees `URISpec` are the
-        `parent` to the apples `URISpec`).
+        Optional `URISpec`-like object under-which this is always sub-mounted.
+        Defaults to None.
+
+    `root`
+        Optional root URI fragment(e.g. /version2013 or /). If this is provided
+        then collection and member URIS can be generated as well as matched.
+        Defaults to None.
     """
 
-    member_re = r'(\w+?)'
-
-    def __init__(self, collection, member=1, parent=None):
-        self.collection_re = '/' + collection
+    def __init__(self, collection, member, parent=None, root=None):
+        # root
+        if parent and root:
+            raise ValueError('Cannot specify parent and root')
+        self.root_fmt = None
         if parent:
-            self.collection_re = parent.member_re + '/' + collection
-        if isinstance(member, int):
-            self.member_re = '/' + '/'.join([self.member_re] * member)
-        else:
-            self.member_re = '/' + member
+            if parent.root_fmt is not None:
+                self.root_fmt = parent.root_fmt
+        elif root:
+            self.root_fmt, _ = self._crack(root)
+            self.root_fmt = self.root_fmt.rstrip('/')
+
+        # collection
+        self.collection_fmt, self.collection_re = self._crack(collection)
+        if parent:
+            self.collection_fmt = parent.member_fmt + self.collection_fmt
+            self.collection_re = parent.member_re + self.collection_re
+
+        # member
+        self.member_fmt, self.member_re = self._crack(member)
+        self.member_fmt = self.collection_fmt + self.member_fmt
         self.member_re = self.collection_re + self.member_re
+
+    @classmethod
+    def _crack(cls, fragment):
+        fragment = fragment.strip('/')
+        fmt_parts = []
+        re_parts = []
+        for part in fragment.split('/'):
+            m = re.match(r'\{(?P<name>\w[A-Za-z0-9_-]*)\}', part)
+            if m:
+                re_part = r'(?P<' + m.group('name') + r'>[A-Za-z0-9_-]*)'
+                re_parts.append(re_part)
+                fmt_part = m.group('name')
+                fmt_parts.append('{' + fmt_part + '}')
+            else:
+                re_parts.append(re.escape(part))
+                fmt_parts.append(part)
+        spec_fmt = '/' + '/'.join(fmt_parts)
+        spec_re = '/' + '/'.join(re_parts)
+        return spec_fmt, spec_re
+
+    @property
+    def root_uri(self):
+        try:
+            return self.collection_uri()
+        except KeyError:
+            return None
+
+    def collection_uri(self, **ids):
+        if self.root_fmt is None:
+            return None
+        uri = (self.root_fmt + self.collection_fmt).format(**ids)
+        return uri
+
+    def member_uri(self, **ids):
+        if self.root_fmt is None:
+            return None
+        uri = (self.root_fmt + self.member_fmt).format(**ids)
+        return uri
 
     def match(self, uri):
         m = re.search(self.member_re + '$', uri)
         if m:
-            return True, {'collection': False, 'member': m.groups()}
+            return True, {'collection': False, 'ids': m.groupdict()}
         m = re.search(self.collection_re + '$', uri)
         if m:
-            return True, {'collection': True}
+            return True, {'collection': True, 'ids': m.groupdict()}
         return False, {}
 
 
@@ -1116,10 +1163,7 @@ class Resource(object):
     `uri_spec`
         A `URISpec`-like object that use used to match collections and members
         of this resource. This is required.
-    `root_uri`
-        The URI string used to create top-level instances of this resource.
-        Defaults to None in which case you cannot create top-level instances
-        of this resource.
+
     `page_size`
         Default number of items to return when pagination a collection of
         resouces. Defaults to 25.
@@ -1175,8 +1219,6 @@ class Resource(object):
     __metaclass__ = _ResourceMeta
 
     uri_spec = None
-
-    root_uri = None
 
     page_size = 25
 
@@ -1246,10 +1288,10 @@ class Resource(object):
 
     @classproperty
     def query(cls):
-        if not cls.root_uri:
+        if not cls.uri_spec.root_uri:
             raise TypeError('Unable to query {0} resources directly'
                             .format(cls.__name__))
-        return Query(cls, cls.root_uri, page_size=cls.page_size)
+        return Query(cls, cls.uri_spec.root_uri, page_size=cls.page_size)
 
     @classmethod
     def get(cls, uri):
@@ -1269,11 +1311,12 @@ class Resource(object):
         uri = attrs.pop('uri', None)
 
         if not uri:
-            if not type(self).root_uri:
+            root_uri = type(self).uri_spec.root_uri
+            if not root_uri:
                 raise TypeError('Unable to create {0} resources directly'
                                 .format(self.__class__.__name__))
             method = self.client.post
-            uri = type(self).root_uri
+            uri = root_uri
         else:
             method = self.client.put
 

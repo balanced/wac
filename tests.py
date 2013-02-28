@@ -59,19 +59,17 @@ class Resource(wac.Resource):
 
 class Resource1(Resource):
 
-    uri_spec = wac.URISpec('1s')
-
-    root_uri = '/v2/1s'
+    uri_spec = wac.URISpec('1s', '{one}', root='/v2')
 
 
 class Resource2(Resource):
 
-    uri_spec = wac.URISpec('2s')
+    uri_spec = wac.URISpec('2s', '{two}')
 
 
 class Resource3(Resource):
 
-    uri_spec = wac.URISpec('3s')
+    uri_spec = wac.URISpec('3s', '{three}')
 
 
 # tests
@@ -1023,17 +1021,17 @@ class TestQuery(TestCase):
 class TestURISpec(TestCase):
 
     def test_single_member(self):
-        spec = wac.URISpec('as')
+        spec = wac.URISpec('as', '{a}')
 
         class Resource(object):
             pass
 
         for uri, expected in [
-            ('/as', (True, {'collection': True})),
-            ('/as/1', (True, {'collection': False, 'member': ('1',)})),
+            ('/as', (True, {'collection': True, 'ids': {}})),
+            ('/as/1', (True, {'collection': False, 'ids': {u'a': u'1'}})),
             ('/as/1/ababa', (False, {})),
-            ('/version1/as', (True, {'collection': True})),
-            ('/version2/as/1', (True, {'collection': False, 'member': ('1',)})),
+            ('/version1/as', (True, {'collection': True, 'ids': {}})),
+            ('/version2/as/1', (True, {'collection': False, 'ids': {u'a': u'1'}})),
             ('/version3/as/1/ababa', (False, {})),
             ('/no/way', (False, {})),
             ('/no', (False, {})),
@@ -1042,17 +1040,24 @@ class TestURISpec(TestCase):
             self.assertEqual(spec.match(uri), expected)
 
     def test_composite_member(self):
-        spec = wac.URISpec('as', 2)
+        spec = wac.URISpec('as', '{a}/{b}')
 
         for uri, expected in [
-            ('/as', (True, {'collection': True})),
+            ('/as', (True, {'collection': True, 'ids': {}})),
             ('/as/1', (False, {})),
             ('/as/1/ababa',
-             (True, {'collection': False, 'member': ('1', 'ababa')})),
-            ('/version1/as', (True, {'collection': True})),
+             (True, {'collection': False,
+                     'ids': {u'a': u'1', u'b': u'ababa'}})
+              ),
+            ('/version1/as',
+             (True, {'collection': True,
+                     'ids': {},
+                     })
+             ),
             ('/version2/as/1', (False, {})),
             ('/version3/as/1/ababa',
-             (True, {'collection': False, 'member': ('1', 'ababa')})),
+             (True, {'collection': False,
+                     'ids': {u'a': u'1', u'b': u'ababa'}})),
             ('/version3/as/1/aba/ba', (False, {})),
             ('/no/way', (False, {})),
             ('/no', (False, {})),
@@ -1061,18 +1066,38 @@ class TestURISpec(TestCase):
             self.assertEqual(spec.match(uri), expected)
 
     def test_parent(self):
-        tree_spec = wac.URISpec('trees')
-        apple_spec = wac.URISpec('apples', parent=tree_spec)
+        tree_spec = wac.URISpec('trees', '{tree}')
+        apple_spec = wac.URISpec('apples', '{apple}', parent=tree_spec)
 
         for uri, expected in [
             ('/apples', (False, {})),
-            ('/barrles/123/apples', (False, {})),
-            ('/trees/abc/apples', (True, {'collection': True})),
+            ('/barrels/123/apples', (False, {})),
+            ('/trees/abc/apples', (True, {'collection': True,
+                                          'ids': {u'tree': u'abc'}})),
             ('/trees/abc/apples/xyz',
-             (True, {'collection': False, 'member': ('abc', 'xyz')})),
+             (True, {'collection': False,
+                     'ids': {u'apple': u'xyz', u'tree': u'abc'}})),
         ]:
             self.assertEqual(apple_spec.match(uri), expected)
             self.assertEqual(tree_spec.match(uri), (False, {}))
+
+    def test_root(self):
+        tree_spec = wac.URISpec('trees', '{tree}')
+        self.assertIsNone(tree_spec.root_uri)
+
+        tree_spec = wac.URISpec('trees', '{tree}', root='/')
+        self.assertEqual(tree_spec.root_uri, '/trees')
+        self.assertEqual(tree_spec.root_uri, '/trees')
+
+        ground_spec = wac.URISpec('grounds', '{ground}', root='/')
+        tree_spec = wac.URISpec('trees', '{tree}', parent=ground_spec)
+        self.assertIsNone(tree_spec.root_uri)
+        self.assertEqual(
+            tree_spec.collection_uri(ground='level'),
+            '/grounds/level/trees')
+        self.assertEqual(
+            tree_spec.member_uri(ground='level', tree='oak'),
+            '/grounds/level/trees/oak')
 
 
 class TestResource(TestCase):
@@ -1146,7 +1171,7 @@ class TestResource(TestCase):
     def test_query(self):
         q = Resource1.query
         self.assertTrue(isinstance(q, wac.Query))
-        self.assertEqual(q.uri, Resource1.root_uri)
+        self.assertEqual(q.uri, Resource1.uri_spec.root_uri)
 
     @patch('wac.Client._op')
     def test_get(self, _op):
@@ -1232,7 +1257,7 @@ class TestResource(TestCase):
     def test_objectify_uris(self, _op):
         class Resource4(Resource):
 
-            uri_spec = wac.URISpec('4s')
+            uri_spec = wac.URISpec('4s', '{fours}')
 
         data = {
             'ones_uri': '/v1/1s',
