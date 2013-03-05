@@ -743,24 +743,24 @@ class TestPagination(TestCase):
         page3.next = page4
         page4.next = None
 
-        with patch.object(Resource1.client, '_op') as _op,\
-             patch.object(Resource1, 'page_cls') as page_cls:
-            page_cls.return_value = page1
-            resp = _op.return_value
-            resp.data = {
-            }
+        with patch.object(Resource1.client, '_op') as _op:
+            with patch.object(Resource1, 'page_cls') as page_cls:
+                page_cls.return_value = page1
+                resp = _op.return_value
+                resp.data = {
+                }
 
-            page_cls.return_value = page1
-            uri = '/a/uri'
-            pagination = wac.Pagination(Resource1, uri, 25, None)
-            pages = [p for p in pagination]
-            self.assertEqual([page1, page2, page3, page4], pages)
+                page_cls.return_value = page1
+                uri = '/a/uri'
+                pagination = wac.Pagination(Resource1, uri, 25, None)
+                pages = [p for p in pagination]
+                self.assertEqual([page1, page2, page3, page4], pages)
 
-            page_cls.return_value = page2
-            uri = '/a/uri'
-            pagination = wac.Pagination(Resource1, uri, 25, None)
-            pages = [p for p in pagination]
-            self.assertEqual([page2, page3, page4], pages)
+                page_cls.return_value = page2
+                uri = '/a/uri'
+                pagination = wac.Pagination(Resource1, uri, 25, None)
+                pages = [p for p in pagination]
+                self.assertEqual([page2, page3, page4], pages)
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):
@@ -1045,17 +1045,17 @@ class TestQuery(TestCase):
         page2.next = page3
         page3.next = None
 
-        with patch.object(Resource1, 'page_cls') as page_cls,\
-             patch.object(Resource1.client, '_op') as _op:
-            page_cls.side_effect = [page1, page1, page2, page3]
-            resp = _op.return_value
-            resp.data = {
-                '_type': 'page',
-            }
-            uri = '/a/uri'
-            q = wac.Query(Resource1, uri, 4)
-            vs = [v for v in q]
-            self.assertEqual(range(10), vs)
+        with patch.object(Resource1, 'page_cls') as page_cls:
+            with patch.object(Resource1.client, '_op') as _op:
+                page_cls.side_effect = [page1, page1, page2, page3]
+                resp = _op.return_value
+                resp.data = {
+                    '_type': 'page',
+                }
+                uri = '/a/uri'
+                q = wac.Query(Resource1, uri, 4)
+                vs = [v for v in q]
+                self.assertEqual(range(10), vs)
 
 
 class TestURIGen(TestCase):
