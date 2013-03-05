@@ -109,7 +109,7 @@ class Config(object):
     `allow_redirects`
         Flag indicating whether client should follow server redirects (e.g.
         Location header for a 301). Defaults to False.
-    `error_class`
+    `error_cls`
         Callable used to convert ``requests.HTTPError`` exceptions with the
         following signature:
 
@@ -154,7 +154,7 @@ class Config(object):
                  headers=None,
                  echo=False,
                  allow_redirects=False,
-                 error_class=None,
+                 error_cls=None,
                  keep_alive=False):
         self.reset(
             root_url,
@@ -164,7 +164,7 @@ class Config(object):
             headers=headers,
             echo=echo,
             allow_redirects=allow_redirects,
-            error_class=error_class,
+            error_cls=error_cls,
             keep_alive=keep_alive)
 
     def reset(self,
@@ -175,7 +175,7 @@ class Config(object):
               headers=None,
               echo=False,
               allow_redirects=False,
-              error_class=None,
+              error_cls=None,
               keep_alive=False):
         headers = headers or {}
         self.root_url = root_url.rstrip('/') if root_url else None
@@ -185,7 +185,7 @@ class Config(object):
         self.auth = auth
         self.headers = headers
         self.allow_redirects = allow_redirects
-        self.error_class = error_class or Error
+        self.error_cls = error_cls or Error
         self.before_request = []
         self.after_request = []
         self.keep_alive = keep_alive
@@ -206,7 +206,7 @@ class Config(object):
         c.auth = self.auth
         c.headers = self.headers.copy()
         c.allow_redirects = self.allow_redirects
-        c.error_class = self.error_class
+        c.error_cls = self.error_cls
         c.before_request = self.before_request[:]
         c.after_request = self.after_request[:]
         c.keep_alive = self.keep_alive
@@ -313,7 +313,7 @@ class Error(requests.HTTPError):
     `message`
         String message formatted by `format_message`. For different formatting
          derived from `Error`, change `format_message` and pass that as the
-         `error_class` when configuring your `Client`.
+         `error_cls` when configuring your `Client`.
     `status_code`
         The HTTP status code associated with the response. This will always be
         present.
@@ -363,7 +363,7 @@ class Client(threading.local, object):
     `config`
         The default `Configuration` instance to use. See `Configuration` for
         available configuration settings.
-    `error_class`
+    `error_cls`
         The exception class to use when HTTP errors (i.e. != 2xx) are detected.
         Defaults to `Error`.
     `_configs`
@@ -472,7 +472,7 @@ class Client(threading.local, object):
                 handler(ex.response)
             if ex.response.status_code in REDIRECT_STATI:
                 raise Redirection(ex)
-            ex = self.config.error_class(ex)
+            ex = self.config.error_cls(ex)
             raise ex
 
         response.data = None
