@@ -356,7 +356,7 @@ class TestClient(TestCase):
         with self.cli:
             self.cli.config.root_url = '/test'
             self.cli.config.echo = False
-            self.cli.config.error_class = convert_error
+            self.cli.config.error_cls = convert_error
 
             ex_data['type'] = 'type-1'
             ex.response.content = to_json(ex_data)
