@@ -25,7 +25,7 @@ __all__ = [
     'Client',
     'NoResultFound',
     'MultipleResultsFound',
-    'URISpec',
+    'URIGen',
     'ResourceRegistry',
     'Resource',
 ]
@@ -213,6 +213,98 @@ class Config(object):
         return c
 
 
+class _ObjectifyMixin(object):
+
+    @classmethod
+    def _load(cls, resource_cls, value):
+        if isinstance(value, dict) and '_type' in value:
+            _type = value['_type']
+            try:
+                _type_cls = resource_cls.registry.match(_type)
+            except LookupError:
+                logger.warning(
+                    "Unable to determine class for '%s'. Defaulting to "
+                    "dictionary", _type)
+            else:
+                if (issubclass(cls, Resource) and
+                    issubclass(_type_cls, Page)):
+                    value = resource_cls.collection_cls(
+                        resource_cls,
+                        _type_cls(resource_cls, **value),
+                    )
+                if issubclass(_type_cls, Resource):
+                    value = _type_cls(**value)
+                else:
+                    value = _type_cls(resource_cls, **value)
+        if isinstance(value, dict):
+            value = dict(
+                (k, cls._load(resource_cls, v))
+                for k, v in value.iteritems()
+            )
+        elif isinstance(value, (list, tuple)):
+            value = [cls._load(resource_cls, v) for v in value]
+        return value
+
+    def _lazy_load(self, resource_cls, property_cls, uri_key, property_key):
+        cls = self.__class__
+
+        def _load(self):
+            cached_key = '_' + property_key
+            if hasattr(self, cached_key):
+                return getattr(self, cached_key)
+            uri = getattr(self, uri_key)
+            if uri is None:
+                value = None
+            else:
+                resp = resource_cls.client.get(uri)
+                if issubclass(property_cls, Resource):
+                    value = property_cls(**resp.data)
+                elif issubclass(property_cls, ResourceCollection):
+                    page = resource_cls.page_cls(resource_cls, **resp.data)
+                    value = property_cls(resource_cls, page)
+                else:
+                    value = property_cls(resource_cls, **resp.data)
+            setattr(self, cached_key, value)
+            return value
+
+        if not hasattr(cls, property_key):
+            setattr(cls, property_key, property(_load))
+
+    def _objectify(self, resource_cls, **fields):
+        cls = type(self)
+        if cls.type and '_type' in fields and fields['_type'] != cls.type:
+            raise ValueError('{0} type "{1}" does not match "{2}"'
+                             .format(cls.__name__, cls.type, fields['_type'])
+            )
+        for key, value in fields.iteritems():
+            if '_uris' in fields and key in fields['_uris']:
+                _uri = fields['_uris'][key]
+                try:
+                    property_cls = resource_cls.registry.match(_uri['_type'])
+                except LookupError:
+                    logger.warning(
+                        "Unable to determine resource for '%s' with type "
+                        "'%s'. Not attaching lazy load property.",
+                        key, _uri['_type'])
+                else:
+                    if (issubclass(cls, Resource) and
+                        issubclass(property_cls, Page)):
+                        property_cls = resource_cls.collection_cls
+                    self._lazy_load(
+                        resource_cls, property_cls, key, _uri['key']
+                    )
+            elif not  key.startswith('_'):
+                value = cls._load(resource_cls, value)
+            setattr(self, key, value)
+
+    def __repr__(self):
+        attrs = ', '.join([
+            '{0}={1}'.format(k, repr(v))
+            for k, v in self.__dict__.iteritems()
+        ])
+        return '{0}({1})'.format(self.__class__.__name__, attrs)
+
+
 class Error(requests.HTTPError):
     """
     Represents HTTP errors detected by `Client` as specialization of
@@ -230,22 +322,13 @@ class Error(requests.HTTPError):
     in that dict is attached as an attribute to the exception with the
     corresponding value.
     """
-
     def __init__(self, requests_ex):
         message = self.format_message(requests_ex)
         super(Error, self).__init__(message)
         self.status_code = requests_ex.response.status_code
         data = getattr(requests_ex.response, 'data', {})
-        if isinstance(data, dict):
-            for k, v in data.iteritems():
-                setattr(self, k, v)
-
-    def __repr__(self):
-        attrs = ', '.join([
-                          '{0}={1}'.format(k, repr(v))
-                          for k, v in self.__dict__.iteritems()
-                          ])
-        return '{0}({1})'.format(self.__class__.__name__, attrs)
+        for k, v in data.iteritems():
+            setattr(self, k, v)
 
     @classmethod
     def format_message(cls, requests_ex):
@@ -256,6 +339,13 @@ class Error(requests.HTTPError):
         desc = data.pop('description', None)
         message = ': '.join(str(v) for v in [status, status_code, desc] if v)
         return message
+
+    def __repr__(self):
+        attrs = ', '.join([
+            '{0}={1}'.format(k, repr(v))
+            for k, v in self.__dict__.iteritems()
+        ])
+        return '{0}({1})'.format(self.__class__.__name__, attrs)
 
 
 class Redirection(requests.HTTPError):
@@ -422,15 +512,17 @@ class MultipleResultsFound(Exception):
     pass
 
 
-class Page(object):
+class Page(_ObjectifyMixin):
     """
     Represents a page of resources in an pagination. These are used by
     `Pagination`.
 
+    `resource_cls`
+        A `Resource` class.
+
     `uri`
         The uri representing the page.
-    `resource`
-        The resource class.
+
     `data`
         Page data as a dict with the following keys::
 
@@ -456,102 +548,42 @@ class Page(object):
     Note that page data is lazily fetched on first access.
     """
 
-    def __init__(self, resource, uri, data=None):
-        self.resource = resource
-        self.uri = uri
-        self._page = data
-        if self._page is not None:
-            self._page['items'] = [
-                self.resource(**items) for items in self._page['items']
-            ]
+    type = 'page'
 
-    def __repr__(self):
-        attrs = ', '.join(
-            '{0}={1}'.format(k, v)
-            for k, v in [
-                ('uri', self.uri),
-                ('qs', self.qs),
-                ('resource', self.resource),
-            ])
-        return '{0}({1})'.format('Page', attrs)
-
-    def fetch(self):
-        if not self.fetched:
-            resp = self.resource.client.get(self.uri)
-            page = resp.data
-            page['items'] = [
-                self.resource(**items) for items in page['items']
-            ]
-            self._page = page
-        return self._page
-
-    @property
-    def fetched(self):
-        return self._page is not None
+    def __init__(self, resource_cls, **data):
+        self.resource_cls = resource_cls
+        self._objectify(resource_cls, **data)
 
     @property
     def index(self):
         return int(self.offset / self.total) if self.total else 0
-
-    @property
-    def items(self):
-        return self.fetch()['items']
-
-    @property
-    def total(self):
-        return self.fetch()['total']
-
-    @property
-    def offset(self):
-        return self.fetch()['offset']
-
-    @property
-    def limit(self):
-        return self.fetch()['limit']
-
-    @property
-    def first(self):
-        uri = self.fetch()['first_uri']
-        return Page(self.resource, uri)
-
-    @property
-    def previous(self):
-        uri = self.fetch()['previous_uri']
-        return Page(self.resource, uri) if uri else None
-
-    @property
-    def next(self):
-        uri = self.fetch()['next_uri']
-        return Page(self.resource, uri) if uri else None
-
-    @property
-    def last(self):
-        uri = self.fetch()['last_uri']
-        return Page(self.resource, uri)
 
 
 class Pagination(object):
     """
     Collection or index endpoint as a sequence of pages.
 
-    `resource`
-        The class representing this endpoints resources.
+    `resource_cls`
+         A `Resource` class.
+
     `uri`
         URI for the endpoint.
+
     `default_size`
         Default number of items in each page. If a limit parameter is not
         present in `uri` then this default value will be used.
+
     `current`
         Page data as a dict for the current page if available.
 
     The standard sequence indexing and slicing protocols are supported.
     """
 
-    def __init__(self, resource, uri, default_size=10, current=None):
-        self.resource = resource
-        self.uri, limit, offset = self._parse_uri(uri)
+    def __init__(self, resource_cls, uri, default_size=10, current=None):
+        self.resource_cls = resource_cls
+        self.uri, limit, _ = self._parse_uri(uri)
         self.size = limit or default_size
-        self.current = self._page(int(offset / self.size), data=current)
+        self._current = current
 
     @staticmethod
     def _parse_uri(uri):
@@ -594,7 +626,7 @@ class Pagination(object):
 
         return uri, limit, offset
 
-    def _page(self, key, size=None, data=None):
+    def _page(self, key, size=None):
         size = size or self.size
         qs = [
             ('limit', self.size),
@@ -602,36 +634,43 @@ class Pagination(object):
         ]
         qs = urllib.urlencode(qs, doseq=True)
         uri = self.uri + qs
-        return Page(self.resource, uri, data)
+        resp = self.resource_cls.client.get(uri)
+        return self.resource_cls.page_cls(self.resource_cls, **resp.data)
 
     def count(self):
-        if self.current.fetched:
-            total = self.current.total
+        if self._current:
+            total = self._current.total
         else:
             total = self._page(0, 1).total
         return int(math.ceil(total / self.size))
 
+    @property
+    def current(self):
+        if not self._current:
+            self.first()
+        return self._current
+
     def one(self):
         if self.count() > 1:
             raise MultipleResultsFound()
-        self.current = self[0]
-        return self.current
+        self._current = self._page(0)
+        return self._current
 
     def first(self):
-        self.current = self[0]
-        return self.current
+        self._current = self._page(0)
+        return self._current
 
     def previous(self):
         if not self.current.previous:
             return None
-        self.current = self.current.previous
-        return self.current
+        self._current = self._current.previous
+        return self._current
 
     def next(self):
         if not self.current.next:
             return None
-        self.current = self.current.next
-        return self.current
+        self._current = self._current.next
+        return self._current
 
     def __iter__(self):
         page = self.current
@@ -640,7 +679,7 @@ class Pagination(object):
             page = page.next
             if not page:
                 break
-            self.current = page
+            self._current = page
 
     def __len__(self):
         return self.count()
@@ -663,8 +702,8 @@ class Pagination(object):
                 raise IndexError('index out of range')
         elif key > self.count():
             raise IndexError('index  out of range')
-        if self.current.index == key:
-            return self.current
+        if self._current.index == key:
+            return self._current
         return self._page(key)
 
     def __getitem__(self, key):
@@ -843,10 +882,12 @@ class Query(PaginationMixin):
     and `SortExpressions` which act to filter and order the resources at the
     endpoint.
 
-    `resource`
-        The class representing this endpoints resources.
+    `resource_cls`
+        A `Resource` class.
+
     `uri`
         URI for the endpoint.
+
     `page_size`
         The number of items in each page.
 
@@ -859,9 +900,9 @@ class Query(PaginationMixin):
     The following sorting format is assumed:
     """
 
-    def __init__(self, resource, uri, page_size):
+    def __init__(self, resource_cls, uri, page_size):
         super(Query, self).__init__()
-        self.resource = resource
+        self.resource_cls = resource_cls
         parsed = self._parse_uri(uri, page_size)
         self.uri, self.filters, self.sorts, self.page_size = parsed
         self._pagination = None
@@ -936,17 +977,13 @@ class Query(PaginationMixin):
     def pagination(self):
         if not self._pagination:
             uri = self.uri + '?' + self._qs()
-            self._pagination = Pagination(self.resource, uri, self.page_size)
+            self._pagination = Pagination(self.resource_cls, uri, self.page_size)
         return self._pagination
 
 
-# uri specs
-
-class URISpec(object):
+class URIGen(object):
     """
-    Defines URI matching information for a resource. It is used to map a URIs
-    to resource classes. If root information is provided URI generation can be
-    done as well as matching.
+    Defines URI generation information for a resource.
 
     `collection`
         A collection URI fragment (e.g. apples or barrels/{barrel}/apples).
@@ -955,56 +992,31 @@ class URISpec(object):
         A member URI fragment ({apples} or {one}/{two}).
 
     `parent`
-        Optional `URISpec`-like object under-which this is always sub-mounted.
-        Defaults to None.
-
-    `root`
-        Optional root URI fragment(e.g. /version2013 or /). If this is provided
-        then collection and member URIS can be generated as well as matched.
+        Optional `URIGen`-like object under-which this is always sub-mounted.
         Defaults to None.
     """
 
-    def __init__(self, collection, member, parent=None, root=None):
-        # root
-        if parent and root:
-            raise ValueError('Cannot specify parent and root')
-        self.root_fmt = None
-        if parent:
-            if parent.root_fmt is not None:
-                self.root_fmt = parent.root_fmt
-        elif root:
-            self.root_fmt, _ = self._crack(root)
-            self.root_fmt = self.root_fmt.rstrip('/')
-
-        # collection
-        self.collection_fmt, self.collection_re = self._crack(collection)
+    def __init__(self, collection, member, parent=None):
+        self.collection = collection
+        self.collection_fmt = self._parse(collection)
         if parent:
             self.collection_fmt = parent.member_fmt + self.collection_fmt
-            self.collection_re = parent.member_re + self.collection_re
-
-        # member
-        self.member_fmt, self.member_re = self._crack(member)
-        self.member_fmt = self.collection_fmt + self.member_fmt
-        self.member_re = self.collection_re + self.member_re
+        self.member = member
+        self.member_fmt = self.collection_fmt + self._parse(member)
 
     @classmethod
-    def _crack(cls, fragment):
+    def _parse(cls, fragment):
         fragment = fragment.strip('/')
-        fmt_parts = []
-        re_parts = []
+        parts = []
         for part in fragment.split('/'):
-            m = re.match(r'\{(?P<name>\w[A-Za-z0-9_-]*)\}', part)
+            m = re.match(r'\{(?P<name>\w[\w_-]*)\}', part)
             if m:
-                re_part = r'(?P<' + m.group('name') + r'>[A-Za-z0-9_-]*)'
-                re_parts.append(re_part)
-                fmt_part = m.group('name')
-                fmt_parts.append('{' + fmt_part + '}')
+                part = m.group('name')
+                parts.append('{' + part + '}')
             else:
-                re_parts.append(re.escape(part))
-                fmt_parts.append(part)
-        spec_fmt = '/' + '/'.join(fmt_parts)
-        spec_re = '/' + '/'.join(re_parts)
-        return spec_fmt, spec_re
+                parts.append(part)
+        fmt = '/' + '/'.join(parts)
+        return fmt
 
     @property
     def root_uri(self):
@@ -1014,33 +1026,60 @@ class URISpec(object):
             return None
 
     def collection_uri(self, **ids):
-        if self.root_fmt is None:
-            return None
-        uri = (self.root_fmt + self.collection_fmt).format(**ids)
-        return uri
+        return (self.collection_fmt).format(**ids)
 
     def member_uri(self, **ids):
-        if self.root_fmt is None:
-            return None
-        uri = (self.root_fmt + self.member_fmt).format(**ids)
-        return uri
-
-    def match(self, uri):
-        m = re.search(self.member_re + '$', uri)
-        if m:
-            return True, {'collection': False, 'ids': m.groupdict()}
-        m = re.search(self.collection_re + '$', uri)
-        if m:
-            return True, {'collection': True, 'ids': m.groupdict()}
-        return False, {}
+        return (self.member_fmt).format(**ids)
 
 
 # resources
 
+class ResourceCollection(PaginationMixin):
+    """
+    Collection endpoint.
+
+    `resource_cls`
+        A `Resource` class.
+
+    `data`
+        The first page. In some cases a nested collection endpoint will be
+        rendered by the server with its first page (rather than as just a
+        string). In those cases we initialize the `pagination` current page
+        with that data.
+
+    Note that the pages that are part of the `ResourceCollection` can be
+    accessed via the `pagination` attribute. However you can also access
+    `ResourceCollection` as a sequence of `resource`s which is provided by
+    `PaginationMixin`.
+    """
+
+    def __init__(self, resource_cls, page):
+        super(ResourceCollection, self).__init__()
+        self.uri = page.uri
+        self.resource_cls = resource_cls
+        self.pagination = Pagination(resource_cls, page.uri, current=page)
+
+    def create(self, **kwargs):
+        resp = self.resource_cls.client.post(self.uri, data=kwargs)
+        return self._load(resp.data)
+
+    def filter(self, *args, **kwargs):
+        q = self.resource_cls.query_cls(
+            self.resource_cls, self.uri, self.pagination.size)
+        q.filter(*args, **kwargs)
+        return q
+
+    def sort(self, *args):
+        q = self.resource_cls.query_cls(
+            self.resource_cls, self.uri, self.pagination.size)
+        q.sort(*args)
+        return q
+
+
 class ResourceRegistry(dict):
     """
-    A registry mapping resources classes to `URISpec`s. It is used to determine
-    which resource class shluld be used when objectifying a URI.
+    A registry mapping resources types to classes. It is used to determine
+    which resource class should be used when objectifying resource data.
 
     You only really ever need to create this once and attach it to your base
     resource class as a `registry` class attribute::
@@ -1052,14 +1091,14 @@ class ResourceRegistry(dict):
 
     """
 
-    def match(self, uri):
-        uri = uri.rstrip('/')
-        for resource_cls, spec in self.iteritems():
-            matched, flags = spec.match(uri)
-            if matched:
-                return resource_cls, flags
-        raise LookupError("No resource with uri spec matching '{0}'"
-                          .format(uri))
+    def match(self, type):
+        cls = self.get(type, None)
+        if cls:
+            return cls
+        raise LookupError(
+            "No resource with type '{0}' registered"
+            .format(type)
+        )
 
 
 class _ResourceField(object):
@@ -1137,8 +1176,11 @@ class _ResourceField(object):
 
 class _ResourceFields(object):
 
+    def __init__(self, field_cls):
+        self.field_cls = field_cls
+
     def __getattr__(self, name):
-        field = _ResourceField(name)
+        field = self.field_cls(name)
         setattr(self, name, field)
         return field
 
@@ -1149,24 +1191,50 @@ class _ResourceMeta(type):
 
     def __new__(mcs, cls_name, cls_bases, cls_dict):
         cls = type.__new__(mcs, cls_name, cls_bases, cls_dict)
-        cls.fields = cls.f = _ResourceFields()
-        if getattr(cls, 'uri_spec', None):
-            cls.registry[cls] = cls.uri_spec
+        cls.fields = cls.f = _ResourceFields(cls.field_cls)
+        if not cls.type:
+            return cls
+        if (cls.type in cls.registry and
+            not issubclass(cls, cls.registry[cls.type])):
+            logger.warning(
+               "Overriding type '%s' to %s already registered to '%s'",
+               cls.type, cls.__name__, cls.registry[cls.type].__name__)
+        cls.registry[cls.type] = cls
+        if cls.page_cls.type not in cls.registry:
+            cls.registry[cls.page_cls.type] = cls.page_cls
+        elif cls.registry[cls.page_cls.type] is not cls.page_cls:
+            logger.warning("Page type '%s' already registered to '%s'",
+                           cls.page_cls.type,
+                           cls.registry[cls.page_cls.type].__name__)
         return cls
 
 
-class Resource(object):
+class Resource(_ObjectifyMixin):
     """
     The core resource class. Any given URI addresses a type of resource and
     this class is the object representation of that resource.
 
-    `uri_spec`
-        A `URISpec`-like object that use used to match collections and members
+    `client`
+
+    `registry`
+
+    `type`
+
+    `query_cls`
+
+    `collection_cls`
+
+    `page_cls`
+
+    `field_cls`
+
+    `uri_gen`
+        A `URIGen`-like object that use used to match collections and members
         of this resource. This is required.
 
     `page_size`
         Default number of items to return when pagination a collection of
-        resouces. Defaults to 25.
+        resources. Defaults to 25.
 
     Typically a resource is very simple. You start by defining a base
     resource::
@@ -1180,21 +1248,21 @@ class Resource(object):
 
         class Playlist(Resource):
 
-            uri_spec = wac.URISpec('playlists')
+            uri_gen = wac.URIGen('playlists')
 
             root = '/v1/playlists'
 
 
         class Song(Resource):
 
-            uri_spec = wac.URISpec('songs')
+            uri_gen = wac.URIGen('songs')
 
 
     You can add helper functions to your resource if you like::
 
         class Playlist(Resource):
 
-            uri_spec = wac.URISpec('playlists')
+            uri_gen = wac.URIGen('playlists')
 
             root_uri = '/v1/playlists'
 
@@ -1218,13 +1286,27 @@ class Resource(object):
 
     __metaclass__ = _ResourceMeta
 
-    uri_spec = None
+    query_cls = Query
+
+    collection_cls = ResourceCollection
+
+    page_cls = Page
+
+    field_cls = _ResourceField
+
+    uri_gen = None
 
     page_size = 25
 
+    client = None
+
+    registry = None
+
+    type = None
+
     def __init__(self, **kwargs):
         super(Resource, self).__init__()
-        self._objectify(**kwargs)
+        self._objectify(self.__class__, **kwargs)
 
     def __repr__(self):
         attrs = ', '.join([
@@ -1233,97 +1315,36 @@ class Resource(object):
         ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
-    def _attach_property(self, new_key, key):
-
-        def _load(self):
-            uri = getattr(self, key)
-            try:
-                resource_cls, flags = self.registry.match(uri)
-            except LookupError:
-                logger.warning(
-                    "Unable to determine resource for '%s' from '%s'.",
-                    new_key, key)
-            else:
-                if not flags.get('collection', False):
-                    resp = resource_cls.client.get(uri)
-                    return resource_cls(**resp.data)
-                else:
-                    return ResourceCollection(
-                        resource_cls,
-                        uri,
-                        type(self).page_size,
-                    )
-            return None
-
-        if not hasattr(self.__class__, new_key):
-            setattr(self.__class__, new_key, property(_load))
-
-    def _objectify(self, **kwargs):
-        # iterate through the schema
-        for key, value in kwargs.iteritems():
-            # sub-resource
-            if isinstance(value, dict) and 'uri' in value:
-                uri = value['uri']
-                try:
-                    resource, flags = self.registry.match(uri)
-                except LookupError:
-                    logger.warning(
-                        "Unable to determine resource for '%s' from '%s'. "
-                        "Make sure it is added in resources.py! Defaulting to "
-                        "dictionary based access", key, uri)
-                    setattr(self, key, value)
-                else:
-                    if not flags.get('collection', False):
-                        value = resource(**value)
-                    else:
-                        value = ResourceCollection(
-                            resource, uri, flags['page_size'], value)
-                    setattr(self, key, value)
-            # uri
-            elif isinstance(key, basestring) and key.endswith('_uri'):
-                self._attach_property(key[:-4], key)
-                setattr(self, key, value)
-            else:
-                setattr(self, key, value)
-
     @classproperty
     def query(cls):
-        if not cls.uri_spec.root_uri:
+        if not cls.uri_gen or not cls.uri_gen.root_uri:
             raise TypeError('Unable to query {0} resources directly'
                             .format(cls.__name__))
-        return Query(cls, cls.uri_spec.root_uri, page_size=cls.page_size)
+        return Query(cls, cls.uri_gen.root_uri, page_size=cls.page_size)
 
     @classmethod
     def get(cls, uri):
-        resource, flags = cls.registry.match(uri)
-        if flags.get('collection', False):
-            raise ValueError("'{0}' resolves to a {1} collection".format(
-                uri, resource.__name__))
-        if not issubclass(resource, cls):
-            raise ValueError(
-                "'{0}' resolves to a {1} member which is not a subclass of {2}"
-                .format(uri, resource.__name__, cls.__name__))
         resp = cls.client.get(uri)
         return cls(**resp.data)
 
     def save(self):
+        cls = type(self)
         attrs = self.__dict__.copy()
         uri = attrs.pop('uri', None)
 
         if not uri:
-            root_uri = type(self).uri_spec.root_uri
-            if not root_uri:
+            if not cls.uri_gen or not cls.uri_gen.root_uri:
                 raise TypeError('Unable to create {0} resources directly'
-                                .format(self.__class__.__name__))
-            method = self.client.post
-            uri = root_uri
+                                .format(cls.__name__))
+            method = cls.client.post
+            uri = cls.uri_gen.root_uri
         else:
             method = self.client.put
 
         attrs = dict(
             (k, v)
             for k, v in attrs.iteritems()
-            if not isinstance(v, (Resource, ResourceCollection))
+            if not isinstance(v, (Resource, cls.collection_cls))
         )
 
         response = method(uri, data=attrs)
@@ -1336,46 +1357,3 @@ class Resource(object):
 
     def delete(self):
         self.client.delete(self.uri)
-
-
-class ResourceCollection(PaginationMixin):
-    """
-    Collection endpoint.
-
-    `resource`
-        The class representing this endpoints resources.
-    `uri`
-        URI for the endpoint.
-    `page_size`
-        The number of items in each page.
-    `page`
-        The first page. In some cases a nested collection endpoint will be
-        rendered by the server with its first page (rather than as just a
-        string). In those cases we initialize the `pagination` current page
-        with that data.
-
-    Note that the pages that are part of the `ResourceCollection` can be
-    accessed via the `pagination` attribute. However you can also access
-    `ResourceCollection` as a sequence of `resource`s which is provided by
-    `PaginationMixin`.
-    """
-
-    def __init__(self, resource, uri, page_size, page=None):
-        super(ResourceCollection, self).__init__()
-        self.resource = resource
-        self.uri = uri
-        self.pagination = Pagination(resource, uri, page_size, page)
-
-    def create(self, **kwargs):
-        resp = self.resource.client.post(self.uri, data=kwargs)
-        return self.resource(**resp.data)
-
-    def filter(self, *args, **kwargs):
-        q = Query(self.resource, self.uri, self.pagination.size)
-        q.filter(*args, **kwargs)
-        return q
-
-    def sort(self, *args):
-        q = Query(self.resource, self.uri, self.pagination.size)
-        q.sort(*args)
-        return q

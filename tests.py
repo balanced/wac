@@ -59,17 +59,20 @@ class Resource(wac.Resource):
 
 class Resource1(Resource):
 
-    uri_spec = wac.URISpec('1s', '{one}', root='/v2')
+    type = 'one'
+    uri_gen = wac.URIGen('/v2/1s', '{one}')
 
 
 class Resource2(Resource):
 
-    uri_spec = wac.URISpec('2s', '{two}')
+    type = 'two'
+    uri_gen = wac.URIGen('/v2/2s', '{two}')
 
 
 class Resource3(Resource):
 
-    uri_spec = wac.URISpec('3s', '{three}')
+    type = 'three'
+    uri_gen = wac.URIGen('/v2/3s', '{three}')
 
 
 # tests
@@ -446,7 +449,7 @@ class TestClient(TestCase):
 class TestPage(TestCase):
 
     @patch('wac.requests.get')
-    def test_fetch(self, get):
+    def test_create(self, get):
         get.__name__ = 'get'
         with patch.object(Resource.client, 'config') as config:
             config.root_url = 'http://ex.com'
@@ -456,6 +459,26 @@ class TestPage(TestCase):
             config.auth = ('bob', 'passwerd')
             response = get.return_value
             data = {
+                '_type': 'page',
+                '_uris': {
+                    'first_uri': {
+                        '_type': 'page',
+                        'key': 'first',
+                    },
+                    'previous_uri': {
+                        '_type': 'page',
+                        'key': 'previous',
+                    },
+                    'next_uri': {
+                        '_type': 'page',
+                        'key': 'next',
+                    },
+                    'last_uri': {
+                        '_type': 'page',
+                        'key': 'last',
+                    },
+                },
+                'uri': '/a/uri',
                 'first_uri': '/a/uri/first',
                 'previous_uri': '/a/uri/prev',
                 'next_uri': '/a/uri/next',
@@ -472,41 +495,32 @@ class TestPage(TestCase):
                 'Content-Type': 'application/json',
             }
             response.content = to_json(data)
-            page = wac.Page(Resource, '/a/uri')
-            fetched1 = page.fetch()
-            fetched2 = page.fetch()
+            page = wac.Page(Resource, **data)
 
-        get.assert_called_once_with(
-            'http://ex.com/a/uri',
-            headers={},
-            auth=('bob', 'passwerd'),
-            config={'keepalive': True},
-            allow_redirects=False)
-        self.assertTrue(fetched1 is fetched2)
-        self.assertItemsEqual(
-            fetched1.keys(),
-            ['first_uri', 'last_uri', 'limit', 'next_uri', 'offset',
-             'previous_uri', 'total', 'items',
-             ])
-        for k in [
-            'first_uri', 'last_uri', 'limit', 'next_uri', 'offset',
-            'previous_uri', 'total',
-        ]:
-            self.assertEqual(fetched1[k], data[k])
-        self.assertEqual(len(fetched1['items']), len(data['items']))
+    def test_links(self):
+        with patch.object(Resource1.client, '_op') as _op:
+            resp = _op.return_value = Mock()
 
-    @patch('wac.requests.get')
-    def test_links(self, get):
-        get.__name__ = 'get'
-        with patch.object(Resource.client, 'config') as config:
-            config.root_url = 'http://ex.com'
-            config.echo = False
-            config.allow_redirects = False
-            config.auth = ('bob', 'passwerd')
-            config.keep_alive = False
-
-            response = get.return_value
-            data = {
+            common_data = {
+                '_type': 'page',
+                '_uris': {
+                    'first_uri': {
+                        '_type': 'page',
+                        'key': 'first',
+                    },
+                    'previous_uri': {
+                        '_type': 'page',
+                        'key': 'previous',
+                    },
+                    'next_uri': {
+                        '_type': 'page',
+                        'key': 'next',
+                    },
+                    'last_uri': {
+                        '_type': 'page',
+                        'key': 'last',
+                    },
+                },
                 'first_uri': '/a/uri/first',
                 'previous_uri': '/a/uri/prev',
                 'next_uri': '/a/uri/next',
@@ -517,69 +531,86 @@ class TestPage(TestCase):
                 'items': [
                 ],
             }
-            response.headers = {
-                'Content-Type': 'application/json',
+            data = {
+                'uri': '/a/uri',
             }
-            response.content = to_json(data)
-            page = wac.Page(Resource, '/a/uri')
+            data.update(common_data)
+            resp.data = data
+            page = wac.Page(Resource, **data)
 
+            _op.return_value = Mock(
+                headers={
+                    'Content-Type': 'application/json',
+                })
+
+            data = {
+                'uri': '/a/uri/first',
+            }
+            data.update(common_data)
+            _op.return_value.data = data
             link = page.first
             self.assertEqual(link.uri, '/a/uri/first')
-            self.assertEqual(link.resource, page.resource)
+            self.assertEqual(link.resource_cls, page.resource_cls)
+
+            data = {
+                'uri': '/a/uri/prev',
+            }
+            data.update(common_data)
+            _op.return_value.data = data
             link = page.previous
             self.assertEqual(link.uri, '/a/uri/prev')
-            self.assertEqual(link.resource, page.resource)
+            self.assertEqual(link.resource_cls, page.resource_cls)
+
+            data = {
+                'uri': '/a/uri/next',
+            }
+            data.update(common_data)
+            _op.return_value.data = data
             link = page.next
             self.assertEqual(link.uri, '/a/uri/next')
-            self.assertEqual(link.resource, page.resource)
+            self.assertEqual(link.resource_cls, page.resource_cls)
+
+            data = {
+                'uri': '/a/uri/last',
+            }
+            data.update(common_data)
+            _op.return_value.data = data
             link = page.last
             self.assertEqual(link.uri, '/a/uri/last')
-            self.assertEqual(link.resource, page.resource)
+            self.assertEqual(link.resource_cls, page.resource_cls)
 
-            get.assert_called_once_with(
-                'http://ex.com/a/uri',
-                headers={},
-                config={'keepalive': False},
-                auth=('bob', 'passwerd'),
-                allow_redirects=False)
+            self.assertEqual(_op.call_count, 4)
 
-            get.reset_mock()
+            _op.reset_mock()
 
-            response = get.return_value
+            resp = _op.return_value
             data = {
-                'first_uri': '/a/uri/first',
-                'previous_uri': None,
-                'next_uri': None,
-                'last_uri': '/a/uri/last',
-                'total': 100,
-                'offset': 44,
-                'limit': 2,
-                'items': [
-                ],
+                'uri': '/a/uri',
             }
-            response.headers = {
-                'Content-Type': 'application/json',
-            }
-            response.content = to_json(data)
-            page = wac.Page(Resource, '/a/uri')
+            data.update(common_data)
+            data['previous_uri'] = None
+            data['next_uri'] = None
+            resp.data = data
+            page = wac.Page(Resource, **data)
 
+            data['uri'] = '/a/uri/first'
             link = page.first
             self.assertEqual(link.uri, '/a/uri/first')
-            self.assertEqual(link.resource, page.resource)
+            self.assertEqual(link.resource_cls, page.resource_cls)
+
             link = page.previous
             self.assertEqual(link, None)
+
             link = page.next
             self.assertEqual(link, None)
+
+            data['uri'] = '/a/uri/last'
+            resp.data = data
             link = page.last
             self.assertEqual(link.uri, '/a/uri/last')
-            self.assertEqual(link.resource, page.resource)
+            self.assertEqual(link.resource_cls, page.resource_cls)
 
-            get.assert_called_once_with(
-                'http://ex.com/a/uri',
-                headers={},
-                auth=('bob', 'passwerd'),
-                allow_redirects=False,
-                config={'keepalive': False})
+            self.assertEqual(_op.call_count, 2)
 
 
 class TestPagination(TestCase):
@@ -601,7 +632,7 @@ class TestPagination(TestCase):
 
         Page.return_value = page1
         uri = '/a/uri'
-        pagination = wac.Pagination(None, uri, 25)
+        pagination = wac.Pagination(Resource1, uri, 25, page1)
         self.assertEqual(pagination.current, page1)
 
         for expected_page in [page2, page3]:
@@ -623,25 +654,24 @@ class TestPagination(TestCase):
     @patch.object(wac.Pagination, '_page')
     @patch('wac.Page')
     def test_count(self, Page, _page):
-        page1_unfetched = Mock(fetched=False)
-        page1_fetched = Mock(items=[1, 2, 3], total=8, fetched=True)
+        page1 = Mock(items=[1, 2, 3], total=8)
 
-        def _page_patch(key, size=None, data=None):
-            return [page1_fetched][key]
+        def _page_patch(key, size=None):
+            return [page1][key]
 
         _page.side_effect = _page_patch
 
         uri = '/a/uri'
         pagination = wac.Pagination(None, uri, 6, None)
-        expected_count = int(math.ceil(page1_fetched.total / pagination.size))
+        expected_count = int(math.ceil(page1.total / pagination.size))
         self.assertEqual(pagination.count(), expected_count)
-        _page.assert_called_once_with(0, data=None)
+        _page.assert_called_once_with(0, 1)
 
     def test_count_cached(self):
-        page1 = dict(total=101, items=[])
+        page1 = wac.Page(Resource1, **dict(total=101, items=[]))
         uri = '/a/uri'
         pagination = wac.Pagination(None, uri, 6, page1)
-        expected_count = int(math.ceil(page1['total'] / pagination.size))
+        expected_count = int(math.ceil(page1.total / pagination.size))
         self.assertEqual(pagination.count(), expected_count)
 
     @patch.object(wac.Pagination, '_page')
@@ -650,7 +680,7 @@ class TestPagination(TestCase):
         page2 = Mock(items=[4, 5, 6], total=8)
         page3 = Mock(items=[7, 8], total=8)
 
-        def _page_patch(key, data=None):
+        def _page_patch(key):
             return [page1, page2, page3][key]
 
         _page.side_effect = _page_patch
@@ -679,8 +709,7 @@ class TestPagination(TestCase):
     @patch.object(wac.Pagination, '_page')
     def test_slice(self, _page):
         page1 = Mock(items=[1, 2, 3], total=8)
-        page2_data = dict(items=[4, 5, 6], total=8)
-        page2 = Mock(**page2_data)
+        page2 = Mock(items=[4, 5, 6], total=8)
         page3 = Mock(items=[7, 8], total=8)
 
         def _page_patch(key, data=None):
@@ -689,7 +718,7 @@ class TestPagination(TestCase):
         _page.side_effect = _page_patch
 
         uri = '/a/uri?offset=4'
-        pagination = wac.Pagination(None, uri, 3, page2_data)
+        pagination = wac.Pagination(Resource1, uri, 3, page2)
         self.assertEqual(pagination.current, page2)
 
         pages = [page1, page2, page3]
@@ -700,8 +729,7 @@ class TestPagination(TestCase):
         self.assertEqual(pages[100:], pagination[100:])
         self.assertEqual(pages[3:2:12], pagination[3:2:12])
 
-    @patch('wac.Page')
-    def test_iter(self, Page):
+    def test_iter(self):
         page1 = Mock()
         page1.items = [1, 2, 3]
         page2 = Mock()
@@ -715,22 +743,29 @@ class TestPagination(TestCase):
         page3.next = page4
         page4.next = None
 
-        Page.return_value = page1
-        uri = '/a/uri'
-        pagination = wac.Pagination(None, uri, 25)
-        pages = [p for p in pagination]
-        self.assertEqual([page1, page2, page3, page4], pages)
+        with patch.object(Resource1.client, '_op') as _op,\
+             patch.object(Resource1, 'page_cls') as page_cls:
+            page_cls.return_value = page1
+            resp = _op.return_value
+            resp.data = {
+            }
 
-        Page.return_value = page2
-        uri = '/a/uri'
-        pagination = wac.Pagination(None, uri, 25)
-        pages = [p for p in pagination]
-        self.assertEqual([page2, page3, page4], pages)
+            page_cls.return_value = page1
+            uri = '/a/uri'
+            pagination = wac.Pagination(Resource1, uri, 25, None)
+            pages = [p for p in pagination]
+            self.assertEqual([page1, page2, page3, page4], pages)
+
+            page_cls.return_value = page2
+            uri = '/a/uri'
+            pagination = wac.Pagination(Resource1, uri, 25, None)
+            pages = [p for p in pagination]
+            self.assertEqual([page2, page3, page4], pages)
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):
 
-        def _page_patch(key, data=None):
+        def _page_patch(key, size=None):
             return pages[key]
 
         _page.side_effect = _page_patch
@@ -839,7 +874,7 @@ class TestQuery(TestCase):
     @patch.object(wac.Pagination, '_page')
     def test_one(self, _page):
 
-        def _page_patch(key, size=None, data=None):
+        def _page_patch(key, size=None):
             return pages[key]
 
         _page.side_effect = _page_patch
@@ -851,7 +886,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.NoResultFound):
             q.one()
-        self.assertEqual(_page.call_count, 4)
+        self.assertEqual(_page.call_count, 2)
         _page.reset_mock()
 
         # multiple
@@ -861,7 +896,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.MultipleResultsFound):
             q.one()
-        self.assertEqual(_page.call_count, 3)
+        self.assertEqual(_page.call_count, 2)
         _page.reset_mock()
 
         # one
@@ -871,7 +906,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         item = q.one()
         self.assertEqual(item, 'one')
-        self.assertEqual(_page.call_count, 3)
+        self.assertEqual(_page.call_count, 2)
         _page.reset_mock()
 
     @patch.object(wac.Pagination, '_page')
@@ -885,7 +920,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.NoResultFound):
             q.one()
-        _page.assert_called_once_with(0, data=None)
+        _page.assert_called_once_with(0)
 
         # multiple
         page = Mock(items=[1, 2, 3], offset=0, total=3, fetched=True)
@@ -895,7 +930,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.MultipleResultsFound):
             q.one()
-        _page.assert_called_once_with(0, data=None)
+        _page.assert_called_once_with(0)
 
         # one
         page = Mock(items=['one'], offset=0, total=1, fetched=True)
@@ -905,7 +940,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         item = q.one()
         self.assertEqual(item, 'one')
-        _page.assert_called_once_with(0, data=None)
+        _page.assert_called_once_with(0)
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):
@@ -1010,104 +1045,88 @@ class TestQuery(TestCase):
         page2.next = page3
         page3.next = None
 
-        with patch('wac.Page') as Page:
-            Page.side_effect = [page1, page1, page2, page3]
+        with patch.object(Resource1, 'page_cls') as page_cls,\
+             patch.object(Resource1.client, '_op') as _op:
+            page_cls.side_effect = [page1, page1, page2, page3]
+            resp = _op.return_value
+            resp.data = {
+                '_type': 'page',
+            }
             uri = '/a/uri'
-            q = wac.Query(None, uri, 4)
+            q = wac.Query(Resource1, uri, 4)
             vs = [v for v in q]
             self.assertEqual(range(10), vs)
 
 
-class TestURISpec(TestCase):
+class TestURIGen(TestCase):
 
     def test_single_member(self):
-        spec = wac.URISpec('as', '{a}')
+        gen = wac.URIGen('as', '{a}')
 
         class Resource(object):
             pass
 
-        for uri, expected in [
-            ('/as', (True, {'collection': True, 'ids': {}})),
-            ('/as/1', (True, {'collection': False, 'ids': {u'a': u'1'}})),
-            ('/as/1/ababa', (False, {})),
-            ('/version1/as', (True, {'collection': True, 'ids': {}})),
-            ('/version2/as/1', (True, {'collection': False, 'ids': {u'a': u'1'}})),
-            ('/version3/as/1/ababa', (False, {})),
-            ('/no/way', (False, {})),
-            ('/no', (False, {})),
-            ('no', (False, {})),
+        for expected, kwargs in [
+            ('/as/1', dict(a=1)),
         ]:
-            self.assertEqual(spec.match(uri), expected)
+            self.assertEqual(gen.member_uri(**kwargs), expected)
 
     def test_composite_member(self):
-        spec = wac.URISpec('as', '{a}/{b}')
+        gen = wac.URIGen('as', '{a}/{b}')
 
-        for uri, expected in [
-            ('/as', (True, {'collection': True, 'ids': {}})),
-            ('/as/1', (False, {})),
-            ('/as/1/ababa',
-             (True, {'collection': False,
-                     'ids': {u'a': u'1', u'b': u'ababa'}})
-              ),
-            ('/version1/as',
-             (True, {'collection': True,
-                     'ids': {},
-                     })
-             ),
-            ('/version2/as/1', (False, {})),
-            ('/version3/as/1/ababa',
-             (True, {'collection': False,
-                     'ids': {u'a': u'1', u'b': u'ababa'}})),
-            ('/version3/as/1/aba/ba', (False, {})),
-            ('/no/way', (False, {})),
-            ('/no', (False, {})),
-            ('no', (False, {})),
+        for expected, kwargs in [
+            ('/as/1/ababa', dict(a=1, b='ababa')),
         ]:
-            self.assertEqual(spec.match(uri), expected)
+            self.assertEqual(gen.member_uri(**kwargs), expected)
 
     def test_parent(self):
-        tree_spec = wac.URISpec('trees', '{tree}')
-        apple_spec = wac.URISpec('apples', '{apple}', parent=tree_spec)
+        tree_gen = wac.URIGen('trees', '{tree}')
+        apple_gen = wac.URIGen('apples', '{apple}', parent=tree_gen)
 
-        for uri, expected in [
-            ('/apples', (False, {})),
-            ('/barrels/123/apples', (False, {})),
-            ('/trees/abc/apples', (True, {'collection': True,
-                                          'ids': {u'tree': u'abc'}})),
-            ('/trees/abc/apples/xyz',
-             (True, {'collection': False,
-                     'ids': {u'apple': u'xyz', u'tree': u'abc'}})),
+        for expected, kwargs in [
+            ('/trees/1/apples', dict(tree=1)),
         ]:
-            self.assertEqual(apple_spec.match(uri), expected)
-            self.assertEqual(tree_spec.match(uri), (False, {}))
+            self.assertEqual(apple_gen.collection_uri(**kwargs), expected)
+
+        for expected, kwargs in [
+            ('/trees/1/apples/2', dict(tree=1, apple=2)),
+        ]:
+            self.assertEqual(apple_gen.member_uri(**kwargs), expected)
 
     def test_root(self):
-        tree_spec = wac.URISpec('trees', '{tree}')
-        self.assertIsNone(tree_spec.root_uri)
+        tree_gen = wac.URIGen('trees', '{tree}')
+        self.assertIsNotNone(tree_gen.root_uri)
 
-        tree_spec = wac.URISpec('trees', '{tree}', root='/')
-        self.assertEqual(tree_spec.root_uri, '/trees')
-        self.assertEqual(tree_spec.root_uri, '/trees')
-
-        ground_spec = wac.URISpec('grounds', '{ground}', root='/')
-        tree_spec = wac.URISpec('trees', '{tree}', parent=ground_spec)
-        self.assertIsNone(tree_spec.root_uri)
-        self.assertEqual(
-            tree_spec.collection_uri(ground='level'),
-            '/grounds/level/trees')
-        self.assertEqual(
-            tree_spec.member_uri(ground='level', tree='oak'),
-            '/grounds/level/trees/oak')
+        apple_spec = wac.URIGen('trees/{tree}/apples', '{apple}')
+        self.assertIsNone(apple_spec.root_uri)
 
 
 class TestResource(TestCase):
 
     _objectify_payload = {
+        '_type': 'one',
+        '_uris': {
+            'one_3_uri': {
+                '_type': 'three',
+                'key': 'one_3',
+            },
+            'more_3s_uri': {
+                '_type': 'page',
+                'key': 'more_3s',
+            }
+        },
         'uri': '/v1/1s/id123',
         'hi': 'there',
         'one': 2,
         'apples': [1, 2, 3],
         'two': {
+            '_type': 'two',
+            '_uris': {
+                'threes_uri': {
+                    '_type': 'page',
+                    'key': 'threes',
+                }
+            },
             'uri': '/v2/2s/idee',
             'name': 'zeek',
             'threes_uri': '/v1/3s',
@@ -1119,7 +1138,9 @@ class TestResource(TestCase):
     def _objectify_equal(self, o):
         # o
         self.assertItemsEqual(
-            ['uri',
+            ['_type',
+             '_uris',
+             'uri',
              'hi',
              'two',
              'one',
@@ -1134,34 +1155,65 @@ class TestResource(TestCase):
         self.assertEqual(o.apples, [1, 2, 3])
         self.assertEqual(o.one_3_uri, '/v1/3s/abc123')
         self.assertEqual(o.more_3s_uri, '/v1/3s')
-        self.assertTrue(isinstance(o.more_3s, wac.ResourceCollection))
-        self.assertEqual(o.more_3s.uri, o.more_3s_uri)
+
+        # o.more_3s
+        with patch.object(Resource1.client, '_op') as _op:
+            resp = _op.return_value = Mock()
+            resp.data = {
+                '_type': 'page',
+                'uri': o.more_3s_uri,
+            }
+            self.assertTrue(isinstance(o.more_3s, wac.ResourceCollection))
+            self.assertEqual(o.more_3s.uri, o.more_3s_uri)
 
         # o.one_three
         with patch.object(Resource2.client, '_op') as _op:
             resp = _op.return_value = Mock()
             resp.data = {
+                '_type': 'three',
+                '_uris': {
+                    'ones_uri': {
+                        '_type': 'page',
+                        'key': 'ones',
+                    }
+                },
                 'one': 'two',
                 'two': 'shoes',
                 'ones_uri': '/v33/1s',
             }
             self.assertItemsEqual(
                 o.one_3.__dict__.keys(),
-                ['ones_uri', 'two', 'one'])
+                ['ones_uri', '_type', '_uris', 'two', 'one'])
+            resp.data = {
+                '_type': 'page',
+                '_uris': {
+                },
+                'uri': '/v33/1s',
+            }
             self.assertTrue(isinstance(o.one_3.ones, wac.ResourceCollection))
             self.assertEqual(o.one_3.ones.uri, '/v33/1s')
 
         # o.two
         self.assertItemsEqual(
-            ['uri',
-             'name',
+            ['_type',
+             '_uris',
+             'uri',
              'threes_uri',
+             'name',
              ],
             o.two.__dict__,
         )
         self.assertEqual(o.two.name, 'zeek')
         self.assertEqual(o.two.threes_uri, '/v1/3s')
-        self.assertTrue(isinstance(o.two.threes, wac.ResourceCollection))
+        with patch.object(Resource2.client, '_op') as _op:
+            resp = _op.return_value = Mock()
+            resp.data = {
+                '_type': 'page',
+                '_uris': {
+                },
+                'uri': o.two.threes_uri,
+            }
+            self.assertTrue(isinstance(o.two.threes, wac.ResourceCollection))
         self.assertEqual(o.two.threes.uri, o.two.threes_uri)
 
     def test_objectify(self):
@@ -1171,7 +1223,7 @@ class TestResource(TestCase):
     def test_query(self):
         q = Resource1.query
         self.assertTrue(isinstance(q, wac.Query))
-        self.assertEqual(q.uri, Resource1.uri_spec.root_uri)
+        self.assertEqual(q.uri, Resource1.uri_gen.root_uri)
 
     @patch('wac.Client._op')
     def test_get(self, _op):
@@ -1180,27 +1232,38 @@ class TestResource(TestCase):
 
     @patch('wac.Client._op')
     def test_get_collection(self, _op):
+        resp = _op.return_value = Mock()
+        resp.data = {
+            '_type': 'page',
+        }
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/1s')
         self.assertIn(
-            "'/v2/1s' resolves to a Resource1 collection",
+            'Resource1 type "one" does not match "page"',
             ex_ctx.exception)
 
     @patch('wac.Client._op')
     def test_get_collection_lookup_failure(self, _op):
+        resp = _op.return_value = Mock()
+        resp.data = {
+            '_type': 'page',
+        }
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/1s')
         self.assertIn(
-            "'/v2/1s' resolves to a Resource1 collection",
+            'Resource1 type "one" does not match "page"',
             str(ex_ctx.exception))
 
     @patch('wac.Client._op')
     def test_get_member_mismatch(self, _op):
+        resp = _op.return_value = Mock()
+        resp.data = {
+            '_type': 'two',
+        }
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/2s/id')
         self.assertIn(
-            "'/v2/2s/id' resolves to a Resource2 member which is not a "
-            "subclass of Resource1",
+            'Resource1 type "one" does not match "two"',
             ex_ctx.exception)
 
     @patch('wac.Client._op')
@@ -1257,15 +1320,27 @@ class TestResource(TestCase):
     def test_objectify_uris(self, _op):
         class Resource4(Resource):
 
-            uri_spec = wac.URISpec('4s', '{fours}')
+            type = 'four'
+            uri_gen = wac.URIGen('/v1/4s', '{fours}')
 
         data = {
+            '_type': 'four',
+            '_uris': {
+                'ones_uri': {'_type': 'page', 'key': 'ones'},
+                'two_uri': {'_type': 'two', 'key': 'two'},
+            },
             'ones_uri': '/v1/1s',
             'two_uri': '/v1/2s/id',
         }
         r1 = Resource4(**data)
 
         data = {
+            '_type': 'four',
+            '_uris': {
+                'ones_uri': {'_type': 'page', 'key': 'ones'},
+                'one_uri': {'_type': 'one', 'key': 'one'},
+                'two_uri': {'_type': 'two', 'key': 'two'},
+            },
             'ones_uri': '/v1/somthingelse/1s',
             'one_uri': '/v1/1s/eyedee',
             'two_uri': '/v1/2s/id'
@@ -1274,16 +1349,41 @@ class TestResource(TestCase):
 
         with self.assertRaises(AttributeError):
             r1.one
-        self.assertTrue(isinstance(r1.ones, wac.ResourceCollection))
-        self.assertTrue(r1.ones.uri, '/v1/1s')
-        self.assertTrue(isinstance(r1.two, Resource2))
-        self.assertEqual(r1.two_uri, '/v1/2s/id')
 
+        with patch.object(Resource4.client, '_op') as _op:
+            resp = _op.return_value = Mock()
+            resp.data = {
+                '_type': 'page',
+                'uri': r1.ones_uri,
+            }
+            self.assertTrue(isinstance(r1.ones, wac.ResourceCollection))
+            self.assertTrue(r1.ones.uri, '/v1/1s')
+
+        with patch.object(Resource4.client, '_op') as _op:
+            resp = _op.return_value = Mock()
+            resp.data = {
+                '_type': 'two',
+                'uri': r1.two_uri,
+            }
+            self.assertTrue(isinstance(r1.two, Resource2))
+            self.assertEqual(r1.two.uri, '/v1/2s/id')
+
+        with patch.object(Resource4.client, '_op') as _op:
+            resp = _op.return_value = Mock()
+            resp.data = {
+                '_type': 'one',
+                'uri': r2.one_uri,
+            }
         self.assertTrue(isinstance(r2.one, Resource1))
-        self.assertTrue(isinstance(r2.ones, wac.ResourceCollection))
-        self.assertTrue(r2.ones.uri, '/v1/1s')
-        self.assertTrue(isinstance(r2.two, Resource2))
-        self.assertEqual(r2.two_uri, '/v1/2s/id')
+
+        with patch.object(Resource4.client, '_op') as _op:
+            resp = _op.return_value = Mock()
+            resp.data = {
+                '_type': 'page',
+                'uri': r2.ones_uri,
+            }
+            self.assertTrue(isinstance(r2.ones, wac.ResourceCollection))
+            self.assertTrue(r2.ones.uri, '/v1/1s')
 
     @patch('wac.Client._op')
     def test_update(self, _op):
@@ -1304,6 +1404,10 @@ class TestResource(TestCase):
 class TestResourceCollection(TestCase):
 
     def test_filter(self):
-        resources = wac.ResourceCollection(Resource3, '/some/3s', 25)
+        page = Mock(
+            _type='page',
+            uri='/some/3s',
+        )
+        resources = wac.ResourceCollection(Resource3, page)
         q = resources.filter(Resource3.f.a.ilike('b'))
         self.assertEqual(urllib.unquote(q._qs()), 'a[ilike]=b')
