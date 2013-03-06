@@ -3,6 +3,11 @@
 History
 -------
 
+0.14 (2013-01-29)
+++++++++++++++++++
+
+* Pin requests version to less than 1.0 until we test it with requests > 1.0
+
 0.12 (2012-10-02)
 ++++++++++++++++++
 
