@@ -8,7 +8,7 @@ import urllib
 
 from mock import Mock, patch
 
-import wac
+import mawac as wac
 
 
 # utils
@@ -112,7 +112,7 @@ class TestClient(TestCase):
         super(TestClient, self).setUp()
         self.cli = Client()
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_post(self, _op):
         self.cli.post('/a/post', data={'hi': 'there'})
         _op.assert_called_once_with(
@@ -121,14 +121,14 @@ class TestClient(TestCase):
             headers={'Content-Type': 'application/json'},
             data='{"hi": "there"}')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_get(self, _op):
         self.cli.get('/a/get')
         _op.assert_called_once_with(
             wac.requests.get,
             '/a/get')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_put(self, _op):
         self.cli.put('/a/put', data={'hi': 'ya'})
         _op.assert_called_once_with(
@@ -137,14 +137,14 @@ class TestClient(TestCase):
             headers={'Content-Type': 'application/json'},
             data='{"hi": "ya"}')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_delete(self, _op):
         self.cli.delete('/a/del')
         _op.assert_called_once_with(
             wac.requests.delete,
             '/a/del')
 
-    @patch('wac.requests.get')
+    @patch('mawac.requests.get')
     def test_op_headers(self, f):
         f.__name__ = 'get'
         response = f.return_value = Mock()
@@ -166,7 +166,7 @@ class TestClient(TestCase):
             config={'keepalive': False},
             allow_redirects=False)
 
-    @patch('wac.requests.get')
+    @patch('mawac.requests.get')
     def test_op_auth(self, f):
         f.__name__ = 'get'
         response = f.return_value = Mock()
@@ -187,7 +187,7 @@ class TestClient(TestCase):
             auth=('bob', 'passwerd'),
             allow_redirects=False)
 
-    @patch('wac.requests.post')
+    @patch('mawac.requests.post')
     def test_serialize(self, f):
         f.__name__ = 'post'
         response = f.return_value = Mock()
@@ -209,7 +209,7 @@ class TestClient(TestCase):
             allow_redirects=False,
             data='{"yo": "dawg"}')
 
-    @patch('wac.requests.get')
+    @patch('mawac.requests.get')
     def test_deserialize(self, f):
         response = f.return_value = Mock()
         f.__name__ = 'get'
@@ -287,7 +287,7 @@ class TestClient(TestCase):
         self.assertFalse(hasattr(self.cli.config.headers, 'two'))
         self.assertIs(org_config, self.cli.config)
 
-    @patch('wac.requests.get')
+    @patch('mawac.requests.get')
     def test_default_errors(self, _op):
         ex = wac.requests.HTTPError()
         ex.response = Mock()
@@ -313,7 +313,7 @@ class TestClient(TestCase):
                  "your dad too")
             )
 
-    @patch('wac.requests.get')
+    @patch('mawac.requests.get')
     def test_custom_errors(self, _op):
 
         class ErrorType(Exception):
@@ -370,7 +370,7 @@ class TestClient(TestCase):
             with self.assertRaises(ErrorType) as exc:
                 self.cli.get('/rejected')
 
-    @patch('wac.requests.post')
+    @patch('mawac.requests.post')
     def test_request_handlers(self, f):
         response = f.return_value
         response.headers = {'Content-Type': 'application/json'}
@@ -396,7 +396,7 @@ class TestClient(TestCase):
         after_request.assert_called_once_with(response)
         self.assertDictEqual(result.data, {'bye': 'ya'})
 
-    @patch('wac.requests.post')
+    @patch('mawac.requests.post')
     def test_exception_request_handlers(self, f):
         ex = wac.requests.HTTPError()
         ex.response = Mock()
@@ -433,7 +433,7 @@ class TestClient(TestCase):
         after_request.assert_called_once_with(ex.response)
 
     @patch('requests.session')
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_keep_alive(self, op, session):
         ka_client = wac.Client()
         ka_client.config = default_config
@@ -445,7 +445,7 @@ class TestClient(TestCase):
 
 class TestPage(TestCase):
 
-    @patch('wac.requests.get')
+    @patch('mawac.requests.get')
     def test_fetch(self, get):
         get.__name__ = 'get'
         with patch.object(Resource.client, 'config') as config:
@@ -495,7 +495,7 @@ class TestPage(TestCase):
             self.assertEqual(fetched1[k], data[k])
         self.assertEqual(len(fetched1['items']), len(data['items']))
 
-    @patch('wac.requests.get')
+    @patch('mawac.requests.get')
     def test_links(self, get):
         get.__name__ = 'get'
         with patch.object(Resource.client, 'config') as config:
@@ -584,7 +584,7 @@ class TestPage(TestCase):
 
 class TestPagination(TestCase):
 
-    @patch('wac.Page')
+    @patch('mawac.Page')
     def test_links(self, Page):
         page1 = Mock()
         page1.items = [1, 2, 3]
@@ -621,7 +621,7 @@ class TestPagination(TestCase):
         self.assertEqual(pagination.current, expected_page)
 
     @patch.object(wac.Pagination, '_page')
-    @patch('wac.Page')
+    @patch('mawac.Page')
     def test_count(self, Page, _page):
         page1_unfetched = Mock(fetched=False)
         page1_fetched = Mock(items=[1, 2, 3], total=8, fetched=True)
@@ -700,7 +700,7 @@ class TestPagination(TestCase):
         self.assertEqual(pages[100:], pagination[100:])
         self.assertEqual(pages[3:2:12], pagination[3:2:12])
 
-    @patch('wac.Page')
+    @patch('mawac.Page')
     def test_iter(self, Page):
         page1 = Mock()
         page1.items = [1, 2, 3]
@@ -942,7 +942,7 @@ class TestQuery(TestCase):
         self.assertEqual(_page.call_count, 1)
 
     @patch.object(wac.Pagination, '_page')
-    @patch('wac.Page')
+    @patch('mawac.Page')
     def test_count(self, Page, _page):
         page1 = Mock(items=[1, 2, 3], total=8)
 
@@ -1010,7 +1010,7 @@ class TestQuery(TestCase):
         page2.next = page3
         page3.next = None
 
-        with patch('wac.Page') as Page:
+        with patch('mawac.Page') as Page:
             Page.side_effect = [page1, page1, page2, page3]
             uri = '/a/uri'
             q = wac.Query(None, uri, 4)
@@ -1132,18 +1132,18 @@ class TestResource(TestCase):
         self.assertTrue(isinstance(q, wac.Query))
         self.assertEqual(q.uri, Resource1.uri_spec.collection_uri)
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_get(self, _op):
         Resource1.get('/v2/1s/gooid')
         _op.assert_called_once_with(wac.requests.get, '/v2/1s/gooid')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_get_collection(self, _op):
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/1s')
         self.assertIn('', ex_ctx.exception)
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_get_collection(self, _op):
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/1s')
@@ -1151,7 +1151,7 @@ class TestResource(TestCase):
             "'/v2/1s' resolves to a Resource1 collection",
             str(ex_ctx.exception))
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_get_member_mismatch(self, _op):
         with self.assertRaises(ValueError) as ex_ctx:
             Resource1.get('/v2/2s/id')
@@ -1160,12 +1160,12 @@ class TestResource(TestCase):
             "subclass of Resource1",
             ex_ctx.exception)
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_get_member_base(self, _op):
         Resource.get('/v2/1s/gooid')
         _op.assert_called_once_with(wac.requests.get, '/v2/1s/gooid')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_create_from_save(self, _op):
         Resource1(test='one', two=3, three=True).save()
         self.assertEqual(_op.call_count, 1)
@@ -1181,7 +1181,7 @@ class TestResource(TestCase):
             'test': 'one', 'two': 3, 'three': True,
         })
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_save(self, _op):
         r = Resource1(uri='/v1/1s/heat', guid='heat')
         r.save()
@@ -1200,7 +1200,7 @@ class TestResource(TestCase):
             headers={'Content-Type': 'application/json'},
             data='{"name": "blah"}')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_save_objectify(self, _op):
         resp = _op.return_value = Mock()
         resp.data = self._objectify_payload
@@ -1210,7 +1210,7 @@ class TestResource(TestCase):
         r.save()
         self._objectify_equal(r)
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_objectify_uris(self, _op):
         class Resource4(Resource):
 
@@ -1242,7 +1242,7 @@ class TestResource(TestCase):
         self.assertTrue(isinstance(r2.two, Resource2))
         self.assertEqual(r2.two_uri, '/v1/2s/id')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_update(self, _op):
         Resource1(uri='/v1/1s/eyedee', guid='eyedee').save()
         _op.assert_called_once_with(
@@ -1251,7 +1251,7 @@ class TestResource(TestCase):
             headers={'Content-Type': 'application/json'},
             data='{"guid": "eyedee"}')
 
-    @patch('wac.Client._op')
+    @patch('mawac.Client._op')
     def test_delete(self, _op):
         r = Resource1(uri='/v1/1s/eyedee', guid='eyedee')
         r.delete()

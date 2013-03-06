@@ -10,10 +10,10 @@ else:
 
 
 setup(
-    name='wac',
+    name='mawac',
     version=(re
              .compile(r".*__version__ = '(.*?)'", re.S)
-             .match(open('wac.py').read())
+             .match(open('mawac.py').read())
              .group(1)),
     url='https://github.com/bninja/wac/',
     license=open('LICENSE').read(),
@@ -24,7 +24,7 @@ setup(
         open('README.rst').read() + '\n\n' +
         open('HISTORY.rst').read()
     ),
-    py_modules=['wac'],
+    py_modules=['mawac'],
     package_data={'': ['LICENSE']},
     include_package_data=True,
     tests_require=[
