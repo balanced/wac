@@ -16,7 +16,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.15'
+__version__ = '0.16'
 
 __all__ = [
     'Config',
@@ -228,11 +228,12 @@ class _ObjectifyMixin(object):
             else:
                 if (issubclass(cls, Resource) and
                     issubclass(_type_cls, Page)):
+                    page = _type_cls(resource_cls, **value)
                     value = resource_cls.collection_cls(
                         resource_cls,
-                        _type_cls(resource_cls, **value),
-                    )
-                if issubclass(_type_cls, Resource):
+                        page.uri,
+                        page)
+                elif issubclass(_type_cls, Resource):
                     value = _type_cls(**value)
                 else:
                     value = _type_cls(resource_cls, **value)
@@ -289,11 +290,16 @@ class _ObjectifyMixin(object):
                 else:
                     if (issubclass(cls, Resource) and
                         issubclass(property_cls, Page)):
-                        property_cls = resource_cls.collection_cls
-                    self._lazy_load(
-                        resource_cls, property_cls, key, _uri['key']
-                    )
-            elif not  key.startswith('_'):
+                        collection = resource_cls.collection_cls(
+                            resource_cls,
+                            value
+                        )
+                        setattr(self, _uri['key'], collection)
+                    else:
+                        self._lazy_load(
+                            resource_cls, property_cls, key, _uri['key']
+                        )
+            elif not key.startswith('_'):
                 value = cls._load(resource_cls, value)
             setattr(self, key, value)
 
@@ -1053,15 +1059,15 @@ class ResourceCollection(PaginationMixin):
     `PaginationMixin`.
     """
 
-    def __init__(self, resource_cls, page):
+    def __init__(self, resource_cls, uri, page=None):
         super(ResourceCollection, self).__init__()
-        self.uri = page.uri
+        self.uri = uri
         self.resource_cls = resource_cls
-        self.pagination = Pagination(resource_cls, page.uri, current=page)
+        self.pagination = Pagination(resource_cls, uri, current=page)
 
     def create(self, **kwargs):
         resp = self.resource_cls.client.post(self.uri, data=kwargs)
-        return self._load(resp.data)
+        return self.resource_cls._load(self.resource_cls, resp.data)
 
     def filter(self, *args, **kwargs):
         q = self.resource_cls.query_cls(

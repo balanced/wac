@@ -1147,6 +1147,7 @@ class TestResource(TestCase):
              'apples',
              'one_3_uri',
              'more_3s_uri',
+             'more_3s',
              ],
             o.__dict__.keys(),
         )
@@ -1183,7 +1184,7 @@ class TestResource(TestCase):
             }
             self.assertItemsEqual(
                 o.one_3.__dict__.keys(),
-                ['ones_uri', '_type', '_uris', 'two', 'one'])
+                ['ones', 'ones_uri', '_type', '_uris', 'two', 'one'])
             resp.data = {
                 '_type': 'page',
                 '_uris': {
@@ -1198,6 +1199,7 @@ class TestResource(TestCase):
             ['_type',
              '_uris',
              'uri',
+             'threes',
              'threes_uri',
              'name',
              ],
@@ -1408,6 +1410,6 @@ class TestResourceCollection(TestCase):
             _type='page',
             uri='/some/3s',
         )
-        resources = wac.ResourceCollection(Resource3, page)
+        resources = wac.ResourceCollection(Resource3, page.uri, page)
         q = resources.filter(Resource3.f.a.ilike('b'))
         self.assertEqual(urllib.unquote(q._qs()), 'a[ilike]=b')
