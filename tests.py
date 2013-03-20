@@ -579,7 +579,7 @@ class TestPage(TestCase):
             self.assertEqual(link.uri, '/a/uri/last')
             self.assertEqual(link.resource_cls, page.resource_cls)
 
-            self.assertEqual(_op.call_count, 4)
+            self.assertEqual(_op.call_count, 0)
 
             _op.reset_mock()
 
@@ -610,7 +610,7 @@ class TestPage(TestCase):
             self.assertEqual(link.uri, '/a/uri/last')
             self.assertEqual(link.resource_cls, page.resource_cls)
 
-            self.assertEqual(_op.call_count, 2)
+            self.assertEqual(_op.call_count, 0)
 
 
 class TestPagination(TestCase):
@@ -1147,7 +1147,6 @@ class TestResource(TestCase):
              'apples',
              'one_3_uri',
              'more_3s_uri',
-             'more_3s',
              ],
             o.__dict__.keys(),
         )
@@ -1184,7 +1183,7 @@ class TestResource(TestCase):
             }
             self.assertItemsEqual(
                 o.one_3.__dict__.keys(),
-                ['ones', 'ones_uri', '_type', '_uris', 'two', 'one'])
+                ['ones_uri', '_type', '_uris', 'two', 'one'])
             resp.data = {
                 '_type': 'page',
                 '_uris': {
@@ -1199,7 +1198,6 @@ class TestResource(TestCase):
             ['_type',
              '_uris',
              'uri',
-             'threes',
              'threes_uri',
              'name',
              ],

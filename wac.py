@@ -16,7 +16,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.16'
+__version__ = '0.17'
 
 __all__ = [
     'Config',
@@ -257,14 +257,11 @@ class _ObjectifyMixin(object):
             if uri is None:
                 value = None
             else:
-                resp = resource_cls.client.get(uri)
-                if issubclass(property_cls, Resource):
-                    value = property_cls(**resp.data)
-                elif issubclass(property_cls, ResourceCollection):
-                    page = resource_cls.page_cls(resource_cls, **resp.data)
-                    value = property_cls(resource_cls, page)
+                if issubclass(property_cls, resource_cls.page_cls):
+                    value = resource_cls.collection_cls(resource_cls, uri)
                 else:
-                    value = property_cls(resource_cls, **resp.data)
+                    resp = resource_cls.client.get(uri)
+                    value = property_cls(**resp.data)
             setattr(self, cached_key, value)
             return value
 
@@ -288,17 +285,9 @@ class _ObjectifyMixin(object):
                         "'%s'. Not attaching lazy load property.",
                         key, _uri['_type'])
                 else:
-                    if (issubclass(cls, Resource) and
-                        issubclass(property_cls, Page)):
-                        collection = resource_cls.collection_cls(
-                            resource_cls,
-                            value
-                        )
-                        setattr(self, _uri['key'], collection)
-                    else:
-                        self._lazy_load(
-                            resource_cls, property_cls, key, _uri['key']
-                        )
+                    self._lazy_load(
+                        resource_cls, property_cls, key, _uri['key']
+                    )
             elif not key.startswith('_'):
                 value = cls._load(resource_cls, value)
             setattr(self, key, value)
