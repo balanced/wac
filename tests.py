@@ -886,7 +886,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.NoResultFound):
             q.one()
-        self.assertEqual(_page.call_count, 2)
+        self.assertEqual(_page.call_count, 1)
         _page.reset_mock()
 
         # multiple
@@ -896,7 +896,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.MultipleResultsFound):
             q.one()
-        self.assertEqual(_page.call_count, 2)
+        self.assertEqual(_page.call_count, 1)
         _page.reset_mock()
 
         # one
@@ -906,7 +906,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         item = q.one()
         self.assertEqual(item, 'one')
-        self.assertEqual(_page.call_count, 2)
+        self.assertEqual(_page.call_count, 1)
         _page.reset_mock()
 
     @patch.object(wac.Pagination, '_page')
@@ -920,7 +920,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.NoResultFound):
             q.one()
-        _page.assert_called_once_with(0)
+        _page.assert_called_once_with(0, 2)
 
         # multiple
         page = Mock(items=[1, 2, 3], offset=0, total=3, fetched=True)
@@ -930,7 +930,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         with self.assertRaises(wac.MultipleResultsFound):
             q.one()
-        _page.assert_called_once_with(0)
+        _page.assert_called_once_with(0, 2)
 
         # one
         page = Mock(items=['one'], offset=0, total=1, fetched=True)
@@ -940,7 +940,7 @@ class TestQuery(TestCase):
         _page.reset_mock()
         item = q.one()
         self.assertEqual(item, 'one')
-        _page.assert_called_once_with(0)
+        _page.assert_called_once_with(0, 2)
 
     @patch.object(wac.Pagination, '_page')
     def test_first(self, _page):
@@ -967,7 +967,7 @@ class TestQuery(TestCase):
 
     @patch.object(wac.Pagination, '_page')
     def test_first_cached(self, _page):
-        page = Mock(items=[1, 2, 3], offset=0, total=3, fetched=True)
+        page = Mock(items=[1, 2, 3], offset=0, total=3)
         _page.return_value = page
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)

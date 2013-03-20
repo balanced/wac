@@ -539,8 +539,6 @@ class Page(_ObjectifyMixin):
             URI for last page in pagination.
 
         Defaults to None.
-
-    Note that page data is lazily fetched on first access.
     """
 
     type = 'page'
@@ -640,6 +638,10 @@ class Pagination(object):
         return int(math.ceil(total / self.size))
 
     @property
+    def fetched(self):
+        return self._current is not None
+
+    @property
     def current(self):
         if not self._current:
             self.first()
@@ -697,8 +699,8 @@ class Pagination(object):
                 raise IndexError('index out of range')
         elif key > self.count():
             raise IndexError('index  out of range')
-        if self._current.index == key:
-            return self._current
+        if self.current.index == key:
+            return self.current
         return self._page(key)
 
     def __getitem__(self, key):
@@ -723,9 +725,8 @@ class PaginationMixin(object):
     """
 
     def count(self):
-        page = self.pagination.current
-        if page.fetched:
-            total = page.total
+        if self.pagination.fetched:
+            total = self.pagination.current.total
         else:
             total = self.pagination._page(0, 1).total
         return total
@@ -734,10 +735,9 @@ class PaginationMixin(object):
         return list(self)
 
     def one(self):
-        page = self.pagination.current
-        if page.fetched and page.offset == 0:
-            items = page.items
-            total = page.total
+        if self.pagination.fetched and self.pagination.current.offset == 0:
+            items = self.pagination.current.items
+            total = self.pagination.current.total
         else:
             items = self.pagination._page(0, 2).items
             total = len(items)
@@ -748,9 +748,8 @@ class PaginationMixin(object):
         return items[0]
 
     def first(self):
-        page = self.pagination.current
-        if page.fetched and page.offset == 0:
-            items = page.items
+        if self.pagination.fetched and self.pagination.current.offset == 0:
+            items = self.pagination.current.items
         else:
             items = self.pagination._page(0, 1).items
         return items[0] if items else None
@@ -970,7 +969,7 @@ class Query(PaginationMixin):
 
     @property
     def pagination(self):
-        if not self._pagination:
+        if self._pagination is None:
             uri = self.uri + '?' + self._qs()
             self._pagination = Pagination(self.resource_cls, uri, self.page_size)
         return self._pagination
