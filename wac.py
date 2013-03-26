@@ -16,7 +16,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.17'
+__version__ = '0.18'
 
 __all__ = [
     'Config',
@@ -249,7 +249,7 @@ class _ObjectifyMixin(object):
     def _lazy_load(self, resource_cls, property_cls, uri_key, property_key):
         cls = self.__class__
 
-        def _load(self):
+        def _getter(self):
             cached_key = '_' + property_key
             if hasattr(self, cached_key):
                 return getattr(self, cached_key)
@@ -265,8 +265,12 @@ class _ObjectifyMixin(object):
             setattr(self, cached_key, value)
             return value
 
+        def _setter(self, value):
+            cached_key = '_' + property_key
+            setattr(self, cached_key, value)
+
         if not hasattr(cls, property_key):
-            setattr(cls, property_key, property(_load))
+            setattr(cls, property_key, property(_getter,  _setter))
 
     def _objectify(self, resource_cls, **fields):
         cls = type(self)
