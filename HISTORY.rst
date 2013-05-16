@@ -3,10 +3,16 @@
 History
 -------
 
+0.19 (2013-05-16)
+++++++++++++++++++
+
+* Allow requests version <= 1.1.0.
+
+
 0.14 (2013-01-29)
 ++++++++++++++++++
 
-* Pin requests version to less than 1.0 until we test it with requests > 1.0
+* Pin requests version to less than 1.0 until we test it with requests > 1.0.
 
 0.12 (2012-10-02)
 ++++++++++++++++++
