@@ -16,7 +16,7 @@ import requests
 from requests.models import REDIRECT_STATI
 
 
-__version__ = '0.19'
+__version__ = '0.20'
 
 __all__ = [
     'Config',
@@ -142,8 +142,7 @@ class Config(object):
         reasons (e.g. timeout) `after_request` callables are not called since
         we don't have a response.
     `keep_alive`
-        Flag indicating whether connections should be reused. Defaults to
-        False.
+        Deprecated, keep_alive is set by default in urllib3
     """
 
     def __init__(self,
@@ -444,12 +443,34 @@ class Client(threading.local, object):
         return self._op(self.interface.delete, uri, **kwargs)
 
     def _op(self, f, uri, **kwargs):
+
+        def handle_redirect(response):
+            if not kwargs.get('return_response', True):
+                return
+            if kwargs['allow_redirects']:
+                return
+
+            http_error_msg = '%s Client Error: Redirect' % (
+                response.status_code
+            )
+            http_error = requests.HTTPError(http_error_msg)
+            http_error.response = response
+            raise http_error
+
+        def handle_error(ex):
+            if (kwargs.get('return_response', True) and
+                        'Content-Type' in ex.response.headers):
+                ex.response.data = self._deserialize(ex.response)
+            for handler in self.config.after_request:
+                handler(ex.response)
+            if ex.response.status_code in REDIRECT_STATI:
+                raise Redirection(ex)
+            ex = self.config.error_cls(ex)
+            raise ex
+
         kwargs.setdefault('headers', {})
-        kwargs.setdefault('config', {})
         kwargs['headers'].update(self.config.headers)
         kwargs.setdefault('allow_redirects', self.config.allow_redirects)
-        if 'keep_alive' not in kwargs['config']:
-            kwargs['config']['keepalive'] = self.config.keep_alive
         if self.config.auth:
             kwargs['auth'] = self.config.auth
 
@@ -462,17 +483,11 @@ class Client(threading.local, object):
         try:
             response = f(url, **kwargs)
             if kwargs.get('return_response', True):
-                response.raise_for_status(kwargs['allow_redirects'])
-        except requests.HTTPError, ex:
-            if (kwargs.get('return_response', True) and
-                    'Content-Type' in ex.response.headers):
-                ex.response.data = self._deserialize(ex.response)
-            for handler in self.config.after_request:
-                handler(ex.response)
-            if ex.response.status_code in REDIRECT_STATI:
-                raise Redirection(ex)
-            ex = self.config.error_cls(ex)
-            raise ex
+                response.raise_for_status()
+            if response.status_code in REDIRECT_STATI:
+                handle_redirect(response)
+        except requests.HTTPError as ex:
+            handle_error(ex)
 
         response.data = None
         if (kwargs.get('return_response', True) and
