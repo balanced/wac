@@ -166,7 +166,6 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/a/uri',
             headers={'X-Custom': 'rimz'},
-            config={'keepalive': False},
             allow_redirects=False)
 
     @patch('wac.requests.get')
@@ -186,7 +185,6 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/a/uri',
             headers={},
-            config={'keepalive': False},
             auth=('bob', 'passwerd'),
             allow_redirects=False)
 
@@ -208,7 +206,6 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={'X-Custom': 'rimz', 'Content-Type': 'application/json'},
-            config={'keepalive': True},
             allow_redirects=False,
             data='{"yo": "dawg"}')
 
@@ -229,7 +226,6 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={},
-            config={'keepalive': False},
             allow_redirects=False)
         self.assertEqual(response.data, {'hi': 'ya'})
 
@@ -249,7 +245,6 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={},
-            config={'keepalive': True},
             allow_redirects=False)
         self.assertFalse(response.data, None)
 
@@ -272,7 +267,6 @@ class TestClient(TestCase):
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={},
-            config={'keepalive': True},
             allow_redirects=False)
 
     def test_config_context(self):
@@ -392,7 +386,6 @@ class TestClient(TestCase):
             '/test/a/post/w/hooks',
             {'headers': {'Content-Type': 'application/json'},
              'allow_redirects': False,
-             'config': {'keepalive': False},
              'data': '{"hi": "ya"}',
              }
         )
@@ -428,7 +421,6 @@ class TestClient(TestCase):
             'POST',
             '/test/a/post/w/hooks',
             {'headers': {'Content-Type': 'application/json'},
-             'config': {'keepalive': False},
              'allow_redirects': False,
              'data': '{"hi": "ya"}',
              }
