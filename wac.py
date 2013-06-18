@@ -13,10 +13,8 @@ import urllib
 import urlparse
 
 import requests
-from requests.models import REDIRECT_STATI
 
-
-__version__ = '0.20'
+__version__ = '0.21'
 
 __all__ = [
     'Config',
@@ -31,6 +29,13 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+_REDIRECT_STATI = (
+    requests.status_codes.codes.moved,
+    requests.status_codes.codes.found,
+    requests.status_codes.codes.other,
+    requests.status_codes.codes.temporary_moved,
+)
 
 
 # utilities
@@ -463,7 +468,7 @@ class Client(threading.local, object):
                 ex.response.data = self._deserialize(ex.response)
             for handler in self.config.after_request:
                 handler(ex.response)
-            if ex.response.status_code in REDIRECT_STATI:
+            if ex.response.status_code in _REDIRECT_STATI:
                 raise Redirection(ex)
             ex = self.config.error_cls(ex)
             raise ex
@@ -484,7 +489,7 @@ class Client(threading.local, object):
             response = f(url, **kwargs)
             if kwargs.get('return_response', True):
                 response.raise_for_status()
-            if response.status_code in REDIRECT_STATI:
+            if response.status_code in _REDIRECT_STATI:
                 handle_redirect(response)
         except requests.HTTPError as ex:
             handle_error(ex)
