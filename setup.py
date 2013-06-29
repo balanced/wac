@@ -32,6 +32,7 @@ setup(
         'mock==0.8',
         'simplejson >= 2.1',
         'unittest2 >= 0.5.1',
+        'iso8601',
     ],
     install_requires=[
         'certifi==0.0.8',  # force requests optional
