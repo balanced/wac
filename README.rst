@@ -156,7 +156,7 @@ Contributing
 1. Fork it
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Write your code **and tests**
-4. Ensure all tests still pass (`nosetests -svx tests`)
+4. Ensure all tests still pass (`python setup.py test`)
 5. Commit your changes (`git commit -am 'Add some feature'`)
 6. Push to the branch (`git push origin my-new-feature`)
 7. Create new pull request

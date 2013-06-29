@@ -28,8 +28,7 @@ setup(
     package_data={'': ['LICENSE']},
     include_package_data=True,
     tests_require=[
-        'nose==1.1.2',
-        'mock==0.8',
+        'mock>=0.8',
         'simplejson >= 2.1',
         'unittest2 >= 0.5.1',
         'iso8601',
