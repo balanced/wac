@@ -30,13 +30,6 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-_REDIRECT_STATI = (
-    requests.status_codes.codes.moved,
-    requests.status_codes.codes.found,
-    requests.status_codes.codes.other,
-    requests.status_codes.codes.temporary_moved,
-)
-
 
 # utilities
 
@@ -468,7 +461,7 @@ class Client(threading.local, object):
                 ex.response.data = self._deserialize(ex.response)
             for handler in self.config.after_request:
                 handler(ex.response)
-            if ex.response.status_code in _REDIRECT_STATI:
+            if ex.response.status_code in requests.sessions.REDIRECT_STATI:
                 raise Redirection(ex)
             ex = self.config.error_cls(ex)
             raise ex
@@ -489,7 +482,7 @@ class Client(threading.local, object):
             response = f(url, **kwargs)
             if kwargs.get('return_response', True):
                 response.raise_for_status()
-            if response.status_code in _REDIRECT_STATI:
+            if response.status_code in requests.sessions.REDIRECT_STATI:
                 handle_redirect(response)
         except requests.HTTPError as ex:
             handle_error(ex)
@@ -1260,29 +1253,32 @@ class Resource(_ObjectifyMixin):
         class Resource(wac.Resource):
 
             client = Client()
+
             registry = wac.ResourceRegistry()
 
     And the enumerate all the resources you care about::
 
         class Playlist(Resource):
 
-            uri_gen = wac.URIGen('playlists')
+            type = 'playlist'
 
-            root = '/v1/playlists'
+            uri_gen = wac.URIGen('/v1/playlists', '{playlist}')
 
 
         class Song(Resource):
 
-            uri_gen = wac.URIGen('songs')
+            type = 'song'
+
+            uri_gen = wac.URIGen('/v1/songs', '{song}')
 
 
     You can add helper functions to your resource if you like::
 
         class Playlist(Resource):
 
-            uri_gen = wac.URIGen('playlists')
+            type = 'playlist'
 
-            root_uri = '/v1/playlists'
+            uri_gen = wac.URIGen('/v1/playlists', '{playlist}')
 
             def play_them()
                 ...
@@ -1345,6 +1341,13 @@ class Resource(_ObjectifyMixin):
         resp = cls.client.get(uri)
         return cls(**resp.data)
 
+    def refresh(self):
+        resp = self.client.get(self.uri)
+        instance = self.__class__(**resp.data)
+        self.__dict__.clear()
+        self.__dict__.update(instance.__dict__)
+        return self
+
     def save(self):
         cls = type(self)
         attrs = self.__dict__.copy()
@@ -1365,9 +1368,9 @@ class Resource(_ObjectifyMixin):
             if not isinstance(v, (Resource, cls.collection_cls))
         )
 
-        response = method(uri, data=attrs)
+        resp = method(uri, data=attrs)
 
-        instance = self.__class__(**response.data)
+        instance = self.__class__(**resp.data)
         self.__dict__.clear()
         self.__dict__.update(instance.__dict__)
 

@@ -1,7 +1,9 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+import imp
 import json
+import os
 import math
 import unittest2 as unittest
 import urllib
@@ -1403,3 +1405,12 @@ class TestResourceCollection(TestCase):
         resources = wac.ResourceCollection(Resource3, page.uri, page)
         q = resources.filter(Resource3.f.a.ilike('b'))
         self.assertEqual(urllib.unquote(q._qs()), 'a[ilike]=b')
+
+
+class TestExample(TestCase):
+
+    def test_example(self):
+        path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), 'example.py')
+        )
+        imp.load_source('example', path)

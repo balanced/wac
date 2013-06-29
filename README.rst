@@ -20,13 +20,11 @@ following:
 In the ideal case the client gives your users something approximating an ORM
 for your resources. This library is intended to assist you in writing such a
 client provided the API you are consuming complies with some basic
-expectations:
+conventions:
 
 - Uses HTTP properly.
 
-- Identifies resources using URIs.
-
-- Names nested resources consistently.
+- Annotates resource representations with type and URI information.
 
 Installation
 ------------
@@ -43,26 +41,34 @@ Requirements
 ------------
 
 - `Python <http://python.org/>`_ >= 2.6, < 3.0
-- `Requests <https://github.com/kennethreitz/requests/>`_ >= 0.11.1  
+- `Requests <https://github.com/kennethreitz/requests/>`_ >= 1.2.3
 
 Usage
 -----
 
 Lets work through an example. The code for this example is in ``example.py``.
 
-- First you import wac::
+- First you import wac:
+
+.. code-block:: python
 
     import wac
     
-- Next define the version of your client::
+- Next define the version of your client:
+
+.. code-block:: python
 
     __version__ = '1.0'
     
-- Also define the configuration which all ``Client``\s will use by default::
+- Also define the configuration which all ``Client``\s will use by default:
+
+.. code-block:: python
 
     default_config = wac.Config(None)
     
-- Now be nice and define a function for updating the configuration(s)::
+- Now be nice and define a function for updating the configuration(s):
+
+.. code-block:: python
 
     def configure(root_url, **kwargs):
         default = kwargs.pop('default', True)
@@ -76,7 +82,9 @@ Lets work through an example. The code for this example is in ``example.py``.
             Client.config = wac.Config(root_url, **kwargs
 
 - Now the big one, define your ``Client`` which is what will be used to talk to
-  a server::
+  a server:
+
+.. code-block:: python
 
     class Client(wac.Client):
 
@@ -88,30 +96,43 @@ Lets work through an example. The code for this example is in ``example.py``.
     
         def _deserialize(self, response):
             if response.headers['Content-Type'] != 'application/json':
-                raise Exception("Unsupported content-type '{}'"
-                    .format(response.headers['Content-Type']))
+                raise Exception(
+                    "Unsupported content-type '{}'"
+                    .format(response.headers['Content-Type'])
+                )
             data = json.loads(response.content)
             return data
 
-- Then define your base ``Resource``::
+- Then define your base ``Resource``:
+
+.. code-block:: python
 
     class Resource(wac.Resource):
     
         client = Client()
         registry = wac.ResourceRegistry()
   
-- And finally your actual resources::
+- And finally your actual resources:
+
+.. code-block:: python
 
     class Playlist(Resource):
+
+        type = 'playlist'
     
-        uri_spec = wac.URISpec('playlists', 'guid', root='/v1')
-        
-        
+        uri_gen = wac.URIGen('/v1/playlists', '{playlist}')
+    
+    
     class Song(Resource):
     
-        uri_spec = wac.URISpec('songs', 'guid') 
+        type = 'song'
+    
+        uri_gen = wac.URIGen('/v1/songs', '{song}')
+ 
 
-- Done! Now you can do crazy stuff like this::
+- Done! Now you can do crazy stuff like this:
+
+.. code-block:: python
 
     import example
     

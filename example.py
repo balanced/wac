@@ -63,7 +63,8 @@ class Client(wac.Client):
             return o.isoformat() + 'Z'
         raise TypeError(
             'Object of type {} with value of {} is not JSON serializable'
-            .format(type(o), repr(o)))
+            .format(type(o), repr(o))
+        )
 
     def _serialize(self, data):
         data = json.dumps(data, default=self._default_serialize)
@@ -71,8 +72,10 @@ class Client(wac.Client):
 
     def _deserialize(self, response):
         if response.headers['Content-Type'] != 'application/json':
-            raise Exception("Unsupported content-type '{}'".format(
-                            response.headers['Content-Type']))
+            raise Exception(
+                "Unsupported content-type '{}'"
+                .format(response.headers['Content-Type'])
+            )
         data = json.loads(response.content)
         return self._parse_deserialized(data)
 
@@ -114,14 +117,19 @@ class Resource(wac.Resource):
     """
 
     client = Client()
+
     registry = wac.ResourceRegistry()
 
 
 class Playlist(Resource):
 
-    uri_spec = wac.URISpec('playlists', '{playlist}', root='/v1')
+    type = 'playlist'
+
+    uri_gen = wac.URIGen('/v1/playlists', '{playlist}')
 
 
 class Song(Resource):
 
-    uri_spec = wac.URISpec('songs', '{song}')
+    type = 'song'
+
+    uri_gen = wac.URIGen('/v1/songs', '{song}')
