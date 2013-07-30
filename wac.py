@@ -14,7 +14,7 @@ import urlparse
 
 import requests
 
-__version__ = '0.21'
+__version__ = '0.22'
 
 __all__ = [
     'Config',
@@ -90,23 +90,30 @@ class Config(object):
     `root_url`
         The scheme://authority to use when constructing urls (e.g.
         https://api.example.com). This is required.
+
     `client_agent`
         The name/version of the client (e.g. 'example-client/1.2'). Defaults
         to None.
+
     `user_agent`
         The user agent for the person using your client ('consumer/3.3'). It
         is up to users of your client to configure this. Defaults to None.
+
     `auth`
         Credentials as a user-name, password tuple (e.g. ('me', 'p@$$w0rd')) to
         use for authentication. Defaults to None (i.e. no authentication).
+
     `headers`
         Dictionary of headers to include in each request. Defaults to {}.
+
     `echo`
         Flag indicating whether request and response information should be
         echoed to stdout. This can be used for debugging. Defaults to False.
+
     `allow_redirects`
         Flag indicating whether client should follow server redirects (e.g.
         Location header for a 301). Defaults to False.
+
     `error_cls`
         Callable used to convert ``requests.HTTPError`` exceptions with the
         following signature:
@@ -115,6 +122,7 @@ class Config(object):
                 ...
 
         where ``ex`` is an instance of ``requests.HTTPError``.
+
     `before_request`
         A list of callables to invoke each time before a request is made with
         the following signature:
@@ -126,6 +134,7 @@ class Config(object):
         to the resource targeted by the request and kwargs are all other
         parameters to a request (e.g. headers). Not that you can modify
         `kwargs` (e.g. injecting per-request headers).
+
     `after_request`
         A list of callables to invoke each time after a request is made with
         the following signature:
@@ -139,8 +148,13 @@ class Config(object):
         be called. On the other hand if the requests fails for connection
         reasons (e.g. timeout) `after_request` callables are not called since
         we don't have a response.
+
     `keep_alive`
         Deprecated, keep_alive is set by default in urllib3
+
+    `timeout`
+        Connection timeout in seconds. Defaults to None, which means no
+        timeout.
     """
 
     def __init__(self,
@@ -152,7 +166,9 @@ class Config(object):
                  echo=False,
                  allow_redirects=False,
                  error_cls=None,
-                 keep_alive=False):
+                 keep_alive=False,
+                 timeout=None,
+                 ):
         self.reset(
             root_url,
             client_agent=client_agent,
@@ -162,7 +178,9 @@ class Config(object):
             echo=echo,
             allow_redirects=allow_redirects,
             error_cls=error_cls,
-            keep_alive=keep_alive)
+            keep_alive=keep_alive,
+            timeout=timeout,
+            )
 
     def reset(self,
               root_url,
@@ -173,7 +191,9 @@ class Config(object):
               echo=False,
               allow_redirects=False,
               error_cls=None,
-              keep_alive=False):
+              keep_alive=False,
+              timeout=None,
+              ):
         headers = headers or {}
         self.root_url = root_url.rstrip('/') if root_url else None
         user_agent = ' '.join(p for p in [client_agent, user_agent] if p)
@@ -186,6 +206,7 @@ class Config(object):
         self.before_request = []
         self.after_request = []
         self.keep_alive = keep_alive
+        self.timeout = timeout
         if echo:
             self.before_request.append(Config._echo_request)
             self.after_request.append(Config._echo_response)
@@ -207,6 +228,7 @@ class Config(object):
         c.before_request = self.before_request[:]
         c.after_request = self.after_request[:]
         c.keep_alive = self.keep_alive
+        c.timeout = self.timeout
         return c
 
 
@@ -471,6 +493,8 @@ class Client(threading.local, object):
         kwargs.setdefault('allow_redirects', self.config.allow_redirects)
         if self.config.auth:
             kwargs['auth'] = self.config.auth
+        if self.config.timeout is not None:
+            kwargs['timeout'] = self.config.timeout
 
         url = self.config.root_url + uri
 

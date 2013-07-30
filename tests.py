@@ -164,11 +164,13 @@ class TestClient(TestCase):
             config.headers = {
                 'X-Custom': 'rimz',
             }
+            config.timeout = 61.0
             self.cli._op(f, '/a/uri')
         f.assert_called_once_with(
             'http://ex.com/a/uri',
             headers={'X-Custom': 'rimz'},
-            allow_redirects=False)
+            allow_redirects=config.allow_redirects,
+            timeout=config.timeout)
 
     @patch('wac.requests.get')
     def test_op_auth(self, f):
@@ -183,6 +185,7 @@ class TestClient(TestCase):
             config.keep_alive = False
             config.echo = False
             config.allow_redirects = False
+            config.timeout = None
             self.cli._op(f, '/a/uri')
         f.assert_called_once_with(
             'http://ex.com/a/uri',
@@ -204,11 +207,12 @@ class TestClient(TestCase):
             config.headers = {
                 'X-Custom': 'rimz',
             }
+            config.timeout = None
             self.cli.post('/an/uri', data={'yo': 'dawg'})
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={'X-Custom': 'rimz', 'Content-Type': 'application/json'},
-            allow_redirects=False,
+            allow_redirects=config.allow_redirects,
             data='{"yo": "dawg"}')
 
     @patch('wac.requests.get')
@@ -224,6 +228,7 @@ class TestClient(TestCase):
             config.keep_alive = False
             config.headers = {}
             config.allow_redirects = False
+            config.timeout = None
             self.cli.get('/an/uri')
         f.assert_called_once_with(
             'http://ex.com/an/uri',
@@ -243,11 +248,13 @@ class TestClient(TestCase):
             config.keep_alive = True
             config.headers = {}
             config.allow_redirects = False
+            config.timeout = 30.0
             self.cli.get('/an/uri')
         f.assert_called_once_with(
             'http://ex.com/an/uri',
             headers={},
-            allow_redirects=False)
+            allow_redirects=False,
+            timeout=30.0)
         self.assertFalse(response.data, None)
 
         f.reset_mock()
@@ -261,6 +268,7 @@ class TestClient(TestCase):
             config.echo = False
             config.keep_alive = True
             config.allow_redirects = False
+            config.timeout = None
             config.headers = {}
             with self.assertRaises(Exception) as ex_ctx:
                 self.cli.get('/an/uri')
