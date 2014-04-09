@@ -5,7 +5,7 @@ import imp
 import json
 import os
 import math
-import unittest2py3k as unittest
+import unittest2 as unittest
 import urllib.request, urllib.parse, urllib.error
 
 from mock import Mock, patch

@@ -30,7 +30,7 @@ setup(
     tests_require=[
         'mock>=0.8',
         'simplejson >= 2.1',
-        'unittest2py3k >= 0.5.1',
+        'unittest2 >= 0.5.1',
         'iso8601',
     ],
     install_requires=[
