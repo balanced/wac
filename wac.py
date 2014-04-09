@@ -1,16 +1,16 @@
 """
 Library for helping you write nice clients for RESTful APIs.
 """
-from __future__ import division
+
 import abc
 import logging
 import math
 import pprint
 import re
 import threading
-import httplib
-import urllib
-import urlparse
+import http.client
+import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 
 import requests
 
@@ -259,7 +259,7 @@ class _ObjectifyMixin(object):
         if isinstance(value, dict):
             value = dict(
                 (k, cls._load(resource_cls, v))
-                for k, v in value.iteritems()
+                for k, v in value.items()
             )
         elif isinstance(value, (list, tuple)):
             value = [cls._load(resource_cls, v) for v in value]
@@ -297,7 +297,7 @@ class _ObjectifyMixin(object):
             raise ValueError('{0} type "{1}" does not match "{2}"'
                              .format(cls.__name__, cls.type, fields['_type'])
             )
-        for key, value in fields.iteritems():
+        for key, value in fields.items():
             if '_uris' in fields and key in fields['_uris']:
                 _uri = fields['_uris'][key]
                 try:
@@ -318,7 +318,7 @@ class _ObjectifyMixin(object):
     def __repr__(self):
         attrs = ', '.join([
             '{0}={1}'.format(k, repr(v))
-            for k, v in self.__dict__.iteritems()
+            for k, v in self.__dict__.items()
         ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
@@ -345,13 +345,13 @@ class Error(requests.HTTPError):
         super(Error, self).__init__(message)
         self.status_code = requests_ex.response.status_code
         data = getattr(requests_ex.response, 'data', {})
-        for k, v in data.iteritems():
+        for k, v in data.items():
             setattr(self, k, v)
 
     @classmethod
     def format_message(cls, requests_ex):
         data = getattr(requests_ex.response, 'data', {})
-        status = httplib.responses[requests_ex.response.status_code]
+        status = http.client.responses[requests_ex.response.status_code]
         status = data.pop('status', status)
         status_code = data.pop('status_code', requests_ex.response.status_code)
         desc = data.pop('description', None)
@@ -361,7 +361,7 @@ class Error(requests.HTTPError):
     def __repr__(self):
         attrs = ', '.join([
             '{0}={1}'.format(k, repr(v))
-            for k, v in self.__dict__.iteritems()
+            for k, v in self.__dict__.items()
         ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
@@ -374,7 +374,7 @@ class Redirection(requests.HTTPError):
         super(Redirection, self).__init__(message, response=response)
 
 
-class Client(threading.local, object):
+class Client(threading.local, object, metaclass=abc.ABCMeta):
     """
     Wrapper for all HTTP communication, which is done using requests.
 
@@ -435,8 +435,6 @@ class Client(threading.local, object):
     `Client`s initially will share a `config` so that they can be commonly
     configured.
     """
-
-    __metaclass__ = abc.ABCMeta
     config = None
 
     def __init__(self, keep_alive=True):
@@ -622,7 +620,7 @@ class Pagination(object):
     @staticmethod
     def _parse_uri(uri):
         uri_no_qs, _, qs = uri.partition('?')
-        parsed_qs = urlparse.parse_qs(qs)
+        parsed_qs = urllib.parse.parse_qs(qs)
 
         limit = None
         if 'limit' in parsed_qs:
@@ -653,7 +651,7 @@ class Pagination(object):
                     uri, offset))
             parsed_qs.pop('offset')
 
-        qs = urllib.urlencode(parsed_qs, doseq=True)
+        qs = urllib.parse.urlencode(parsed_qs, doseq=True)
         uri = uri_no_qs + '?'
         if qs:
             uri += qs + '&'
@@ -666,7 +664,7 @@ class Pagination(object):
             ('limit', self.size),
             ('offset', key * self.size),
         ]
-        qs = urllib.urlencode(qs, doseq=True)
+        qs = urllib.parse.urlencode(qs, doseq=True)
         uri = self.uri + qs
         resp = self.resource_cls.client.get(uri)
         return self.resource_cls.page_cls(self.resource_cls, **resp.data)
@@ -704,17 +702,17 @@ class Pagination(object):
         self._current = self._current.previous
         return self._current
 
-    def next(self):
-        if not self.current.next:
+    def __next__(self):
+        if not self.current.__next__:
             return None
-        self._current = self._current.next
+        self._current = self._current.__next__
         return self._current
 
     def __iter__(self):
         page = self.current
         while True:
             yield page
-            page = page.next
+            page = page.__next__
             if not page:
                 break
             self._current = page
@@ -730,7 +728,7 @@ class Pagination(object):
         if key.step == 0:
             raise TypeError('slice step cannot be zero')
         start, stop, step = key.indices(self.count())
-        pages = [self[i] for i in xrange(start, stop, step)]
+        pages = [self[i] for i in range(start, stop, step)]
         return pages
 
     def _index(self, key):
@@ -814,7 +812,7 @@ class PaginationMixin(object):
         start, stop, step = key.indices(self.count())
         page = None
         items = []
-        for i in xrange(start, stop, step):
+        for i in range(start, stop, step):
             idx = int(i / self.pagination.size)
             offset = i % self.pagination.size
             if not page or page.index != idx:
@@ -948,8 +946,8 @@ class Query(PaginationMixin):
             raise ValueError('page_size must be > 0')
         filters, sorts, page_size = [], [], page_size
         uri, _, qs = uri.partition('?')
-        qs = urlparse.parse_qs(qs)
-        for k, vs in qs.iteritems():
+        qs = urllib.parse.parse_qs(qs)
+        for k, vs in qs.items():
             for v in vs:
                 if k == 'sort':
                     sorts.append(v)
@@ -966,7 +964,7 @@ class Query(PaginationMixin):
         qs = []
         qs += self.filters
         qs += self.sorts
-        return urllib.urlencode(qs, doseq=True)
+        return urllib.parse.urlencode(qs, doseq=True)
 
     def filter(self, *args, **kwargs):
         for expression in args:
@@ -982,7 +980,7 @@ class Query(PaginationMixin):
                 values = [values]
             f = (f, ','.join(str(v) for v in values))
             self.filters.append(f)
-        for k, values in kwargs.iteritems():
+        for k, values in kwargs.items():
             f = '{0}'.format(k)
             if not isinstance(values, (list, tuple)):
                 values = [values]
@@ -1154,27 +1152,27 @@ class _ResourceField(object):
         return FilterExpression(self, 'in', args, '!in')
 
     def startswith(self, prefix):
-        if not isinstance(prefix, basestring):
+        if not isinstance(prefix, str):
             raise ValueError('"startswith" prefix  must be a string')
         return FilterExpression(self, 'startswith', prefix, None)
 
     def endswith(self, suffix):
-        if not isinstance(suffix, basestring):
+        if not isinstance(suffix, str):
             raise ValueError('"endswith" suffix  must be a string')
         return FilterExpression(self, 'endswith', suffix, None)
 
     def contains(self, fragment):
-        if not isinstance(fragment, basestring):
+        if not isinstance(fragment, str):
             raise ValueError('"contains" fragment must be a string')
         return FilterExpression(self, 'contains', fragment, '!contains')
 
     def like(self, fragment):
-        if not isinstance(fragment, basestring):
+        if not isinstance(fragment, str):
             raise ValueError('"like" fragment must be a string')
         return FilterExpression(self, 'like', fragment, '!like')
 
     def ilike(self, fragment):
-        if not isinstance(fragment, basestring):
+        if not isinstance(fragment, str):
             raise ValueError('"ilike" fragment must be a string')
         return FilterExpression(self, 'ilike', fragment, '!ilike')
 
@@ -1244,7 +1242,7 @@ class _ResourceMeta(type):
         return cls
 
 
-class Resource(_ObjectifyMixin):
+class Resource(_ObjectifyMixin, metaclass=_ResourceMeta):
     """
     The core resource class. Any given URI addresses a type of resource and
     this class is the object representation of that resource.
@@ -1322,8 +1320,6 @@ class Resource(_ObjectifyMixin):
             song.save()
     """
 
-    __metaclass__ = _ResourceMeta
-
     query_cls = Query
 
     collection_cls = ResourceCollection
@@ -1349,7 +1345,7 @@ class Resource(_ObjectifyMixin):
     def __repr__(self):
         attrs = ', '.join([
             '{0}={1}'.format(k, repr(v))
-            for k, v in self.__dict__.iteritems()
+            for k, v in self.__dict__.items()
         ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
@@ -1388,7 +1384,7 @@ class Resource(_ObjectifyMixin):
 
         attrs = dict(
             (k, v)
-            for k, v in attrs.iteritems()
+            for k, v in attrs.items()
             if not isinstance(v, (Resource, cls.collection_cls))
         )
 

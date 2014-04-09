@@ -46,7 +46,7 @@ class Client(wac.Client):
     def _op(self, *args, **kwargs):
         try:
             return super(Client, self)._op(*args, **kwargs)
-        except wac.Error, ex:
+        except wac.Error as ex:
             raise self._convert_exception(ex)
 
     @staticmethod
@@ -82,8 +82,8 @@ class Client(wac.Client):
     @staticmethod
     def _parse_deserialized(e):
         if isinstance(e, dict):
-            for key in e.iterkeys():
-                if key.endswith('_at') and isinstance(e[key], basestring):
+            for key in e.keys():
+                if key.endswith('_at') and isinstance(e[key], str):
                     e[key] = iso8601.parse_date(e[key])
         return e
 
@@ -92,12 +92,12 @@ class Error(Exception):
 
     def __init__(self, *args, **kwargs):
         super(Error, self).__init__(*args)
-        for k, v in kwargs.iteritems():
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
     def __repr__(self):
         attrs = ', '.join(['{}={}'.format(k, repr(v))
-                           for k, v in self.__dict__.iteritems()])
+                           for k, v in self.__dict__.items()])
         return '{}({}, {})'.format(
             self.__class__.__name__,
             ' '.join(self.args),

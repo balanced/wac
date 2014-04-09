@@ -1,12 +1,12 @@
-from __future__ import division
-from __future__ import unicode_literals
+
+
 
 import imp
 import json
 import os
 import math
 import unittest2 as unittest
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 from mock import Mock, patch
 
@@ -568,7 +568,7 @@ class TestPage(TestCase):
             }
             data.update(common_data)
             _op.return_value.data = data
-            link = page.next
+            link = page.__next__
             self.assertEqual(link.uri, '/a/uri/next')
             self.assertEqual(link.resource_cls, page.resource_cls)
 
@@ -603,7 +603,7 @@ class TestPage(TestCase):
             link = page.previous
             self.assertEqual(link, None)
 
-            link = page.next
+            link = page.__next__
             self.assertEqual(link, None)
 
             data['uri'] = '/a/uri/last'
@@ -638,10 +638,10 @@ class TestPagination(TestCase):
         self.assertEqual(pagination.current, page1)
 
         for expected_page in [page2, page3]:
-            page = pagination.next()
+            page = next(pagination)
             self.assertEqual(page, expected_page)
             self.assertEqual(pagination.current, expected_page)
-        page = pagination.next()
+        page = next(pagination)
         self.assertEqual(page, None)
         self.assertEqual(pagination.current, expected_page)
 
@@ -805,7 +805,7 @@ class TestQuery(TestCase):
         uri = '/a/uri?a[in]=1,2&a[>]=c&b=hiya&d[endswith]=bye'
         q = wac.Query(None, uri, 25)
         self.assertEqual(
-            urllib.unquote(q._qs()), 'a[>]=c&b=hiya&d[endswith]=bye&a[in]=1,2')
+            urllib.parse.unquote(q._qs()), 'a[>]=c&b=hiya&d[endswith]=bye&a[in]=1,2')
 
     def test_filter(self):
         uri = '/a/uri'
@@ -835,7 +835,7 @@ class TestQuery(TestCase):
         q.filter(Resource1.f.f.endswith('lo'))
         self.assertEqual(q.filters[-1], ('f[endswith]', 'lo'))
         self.assertEqual(
-            urllib.unquote(q._qs()),
+            urllib.parse.unquote(q._qs()),
             'a=b&a[!=]=101&b[<]=4&b[<=]=5&c[>]=123&c[>=]=44&d[in]=1,2,3&'
             'd[!in]=6,33,55&e[contains]=it&e[!contains]=soda&f[startswith]=la&'
             'f[endswith]=lo')
@@ -847,7 +847,7 @@ class TestQuery(TestCase):
         self.assertEqual(q.sorts[-1], ('sort', 'me,asc'))
         q.sort(Resource1.f.u.desc())
         self.assertEqual(q.sorts[-1], ('sort', 'u,desc'))
-        self.assertEqual(urllib.unquote(q._qs()), 'sort=me,asc&sort=u,desc')
+        self.assertEqual(urllib.parse.unquote(q._qs()), 'sort=me,asc&sort=u,desc')
 
     @patch.object(wac.Pagination, '_page')
     def test_all(self, _page):
@@ -868,7 +868,7 @@ class TestQuery(TestCase):
 
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)
-        expected_items = range(1, 9)
+        expected_items = list(range(1, 9))
         items = q.all()
         self.assertEqual(expected_items, items)
         self.assertEqual(q.pagination.current, page3)
@@ -1007,8 +1007,8 @@ class TestQuery(TestCase):
 
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)
-        expected_items = range(1, 9)
-        for i in xrange(q.count()):
+        expected_items = list(range(1, 9))
+        for i in range(q.count()):
             self.assertEqual(q[i], expected_items[i])
 
     @patch.object(wac.Pagination, '_page')
@@ -1024,7 +1024,7 @@ class TestQuery(TestCase):
 
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)
-        items = range(1, 9)
+        items = list(range(1, 9))
         self.assertEqual(q[:], items[:])
         self.assertEqual(q[::-1], items[::-1])
         self.assertEqual(q[6:4], items[6:4])
@@ -1057,7 +1057,7 @@ class TestQuery(TestCase):
                 uri = '/a/uri'
                 q = wac.Query(Resource1, uri, 4)
                 vs = [v for v in q]
-                self.assertEqual(range(10), vs)
+                self.assertEqual(list(range(10)), vs)
 
 
 class TestURIGen(TestCase):
@@ -1150,7 +1150,7 @@ class TestResource(TestCase):
              'one_3_uri',
              'more_3s_uri',
              ],
-            o.__dict__.keys(),
+            list(o.__dict__.keys()),
         )
         self.assertEqual(o.hi, 'there')
         self.assertEqual(o.one, 2)
@@ -1184,7 +1184,7 @@ class TestResource(TestCase):
                 'ones_uri': '/v33/1s',
             }
             self.assertItemsEqual(
-                o.one_3.__dict__.keys(),
+                list(o.one_3.__dict__.keys()),
                 ['ones_uri', '_type', '_uris', 'two', 'one'])
             resp.data = {
                 '_type': 'page',
@@ -1281,7 +1281,7 @@ class TestResource(TestCase):
             _op.call_args[0],
             (wac.requests.post, '/v2/1s')
         )
-        self.assertEqual(_op.call_args[1].keys(), ['headers', 'data'])
+        self.assertEqual(list(_op.call_args[1].keys()), ['headers', 'data'])
         self.assertDictEqual(_op.call_args[1]['headers'], {
             'Content-Type': 'application/json'
         })
@@ -1412,7 +1412,7 @@ class TestResourceCollection(TestCase):
         )
         resources = wac.ResourceCollection(Resource3, page.uri, page)
         q = resources.filter(Resource3.f.a.ilike('b'))
-        self.assertEqual(urllib.unquote(q._qs()), 'a[ilike]=b')
+        self.assertEqual(urllib.parse.unquote(q._qs()), 'a[ilike]=b')
 
 
 class TestExample(TestCase):
