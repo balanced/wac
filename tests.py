@@ -1,12 +1,12 @@
 
 
 
-import imp
 import json
 import os
 import math
 import unittest2 as unittest
 import urllib.request, urllib.parse, urllib.error
+import importlib
 
 from mock import Mock, patch
 
@@ -1421,4 +1421,5 @@ class TestExample(TestCase):
         path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), 'example.py')
         )
+        
         importlib.machinery.SourceFileLoader('example', path).load_module()
