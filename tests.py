@@ -1241,7 +1241,7 @@ class TestResource(TestCase):
             Resource1.get('/v2/1s')
         self.assertIn(
             'Resource1 type "one" does not match "page"',
-            ex_ctx.exception)
+            str(ex_ctx.exception))
 
     @patch('wac.Client._op')
     def test_get_collection_lookup_failure(self, _op):
@@ -1265,7 +1265,7 @@ class TestResource(TestCase):
             Resource1.get('/v2/2s/id')
         self.assertIn(
             'Resource1 type "one" does not match "two"',
-            ex_ctx.exception)
+            str(ex_ctx.exception))
 
     @patch('wac.Client._op')
     def test_get_member_base(self, _op):
