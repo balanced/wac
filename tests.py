@@ -1421,4 +1421,4 @@ class TestExample(TestCase):
         path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), 'example.py')
         )
-        imp.load_source('example', path)
+        importlib.machinery.SourceFileLoader('example', path).load_module()
