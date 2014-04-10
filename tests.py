@@ -7,7 +7,6 @@ import math
 import unittest2 as unittest
 import urllib.request, urllib.parse, urllib.error
 import importlib
-
 from mock import Mock, patch
 
 import wac
@@ -568,7 +567,7 @@ class TestPage(TestCase):
             }
             data.update(common_data)
             _op.return_value.data = data
-            link = next(page)
+            link = page.__next__
             self.assertEqual(link.uri, '/a/uri/next')
             self.assertEqual(link.resource_cls, page.resource_cls)
 
@@ -603,7 +602,7 @@ class TestPage(TestCase):
             link = page.previous
             self.assertEqual(link, None)
 
-            link = next(page)
+            link = page.__next__
             self.assertEqual(link, None)
 
             data['uri'] = '/a/uri/last'

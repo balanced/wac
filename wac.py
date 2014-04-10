@@ -712,7 +712,7 @@ class Pagination(object):
         page = self.current
         while True:
             yield page
-            page = next(page)
+            page = page.__next__
             if not page:
                 break
             self._current = page
