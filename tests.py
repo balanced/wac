@@ -567,7 +567,7 @@ class TestPage(TestCase):
             }
             data.update(common_data)
             _op.return_value.data = data
-            link = page.__next__
+            link = page.next
             self.assertEqual(link.uri, '/a/uri/next')
             self.assertEqual(link.resource_cls, page.resource_cls)
 
@@ -602,7 +602,7 @@ class TestPage(TestCase):
             link = page.previous
             self.assertEqual(link, None)
 
-            link = page.__next__
+            link = page.next
             self.assertEqual(link, None)
 
             data['uri'] = '/a/uri/last'

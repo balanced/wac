@@ -703,16 +703,16 @@ class Pagination(object):
         return self._current
 
     def __next__(self):
-        if not self.current.__next__:
+        if not self.current.next:
             return None
-        self._current = self._current.__next__
+        self._current = self._current.next
         return self._current
 
     def __iter__(self):
         page = self.current
         while True:
             yield page
-            page = page.__next__
+            page = page.next
             if not page:
                 break
             self._current = page
