@@ -717,9 +717,10 @@ class Pagination(object):
             page = page.next
             if not page:
                 break
-        if isinstance(page, basestring):
-            new_page = Pagination(self.resource_cls, page, self.size)
-            page = new_page.current
+            if isinstance(page, basestring):
+                uri = page
+                resp = self.resource_cls.client.get(uri)
+                page = self.resource_cls.page_cls(self.resource_cls, **resp.data)
         self._current = page
 
     def __len__(self):
