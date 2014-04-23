@@ -717,7 +717,7 @@ class Pagination(object):
             page = page.next
             if not page:
                 break
-        if not isinstance(page, Pagination):
+        if isinstance(page, basestring):
             new_page = Pagination(self.resource_cls, page, self.size)
             page = new_page.current
         self._current = page
