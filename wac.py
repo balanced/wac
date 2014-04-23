@@ -717,7 +717,10 @@ class Pagination(object):
             page = page.next
             if not page:
                 break
-            self._current = page
+        if not isinstance(page, Pagination):
+            new_page = Pagination(self.resource_cls, page, self.size)
+            page = new_page.current
+        self._current = page
 
     def __len__(self):
         return self.count()
