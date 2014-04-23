@@ -969,7 +969,6 @@ class TestQuery(TestCase):
         item = q.first()
         self.assertEqual(expected_item, item)
 
-    # HERE
     @patch.object(wac.Pagination, '_page')
     def test_first_cached(self, _page):
         page = Mock(items=[1, 2, 3], offset=0, total=3)
