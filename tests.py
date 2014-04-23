@@ -7,7 +7,6 @@ import os
 import math
 import unittest2 as unittest
 import urllib
-import ipdb
 
 from mock import Mock, patch
 
