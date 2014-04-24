@@ -632,6 +632,7 @@ class TestPagination(TestCase):
         page3.previous = page2
         page3.next = None
 
+
         Page.return_value = page1
         uri = '/a/uri'
         pagination = wac.Pagination(Resource1, uri, 25, page1)
@@ -866,12 +867,13 @@ class TestQuery(TestCase):
 
         _page.side_effect = _page_patch
 
+
         uri = '/ur/is'
         q = wac.Query(Resource1, uri, 3)
         expected_items = range(1, 9)
         items = q.all()
         self.assertEqual(expected_items, items)
-        self.assertEqual(q.pagination.current, page3)
+        self.assertEqual(q.pagination.current, page1)
 
     @patch.object(wac.Pagination, '_page')
     def test_one(self, _page):

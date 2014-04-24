@@ -14,7 +14,7 @@ import urlparse
 
 import requests
 
-__version__ = '0.22'
+__version__ = '0.23'
 
 __all__ = [
     'Config',
@@ -717,7 +717,11 @@ class Pagination(object):
             page = page.next
             if not page:
                 break
-            self._current = page
+            if isinstance(page, basestring):
+                uri = page
+                resp = self.resource_cls.client.get(uri)
+                page = self.resource_cls.page_cls(self.resource_cls, **resp.data)
+        self._current = page
 
     def __len__(self):
         return self.count()
