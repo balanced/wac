@@ -10,12 +10,12 @@ else:
 
 
 setup(
-    name='wac',
+    name='txwac',
     version=(re
              .compile(r".*__version__ = '(.*?)'", re.S)
-             .match(open('wac.py').read())
+             .match(open('txwac.py').read())
              .group(1)),
-    url='https://github.com/bninja/wac/',
+    url='https://github.com/trenton42/txwac/',
     license=open('LICENSE').read(),
     author='wac',
     author_email='wac@example.com',
@@ -34,9 +34,7 @@ setup(
         'iso8601',
     ],
     install_requires=[
-        'certifi==0.0.8',  # force requests optional
-        'chardet >= 1.0',  # force requests optional
-        'requests>=1.2.3',
+        'treq'
     ],
     test_suite='tests',
     classifiers=[

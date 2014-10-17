@@ -7,14 +7,13 @@ import logging
 import math
 import pprint
 import re
-import threading
 import httplib
 import urllib
 import urlparse
 
-import requests
+import treq
 
-__version__ = '0.23'
+__version__ = '0.01'
 
 __all__ = [
     'Config',
@@ -29,6 +28,27 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+# Errors
+
+class RequestException(IOError):
+    """There was an ambiguous exception that occurred while handling your
+    request."""
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize RequestException with `request` and `response` objects.
+        """
+        response = kwargs.pop('response', None)
+        self.response = response
+        self.request = kwargs.pop('request', None)
+        if (response is not None and not self.request and hasattr(response, 'request')):
+            self.request = self.response.request
+            super(RequestException, self).__init__(*args, **kwargs)
+
+
+class HTTPError(RequestException):
+            """An HTTP error occurred."""
 
 
 # utilities
@@ -115,13 +135,13 @@ class Config(object):
         Location header for a 301). Defaults to False.
 
     `error_cls`
-        Callable used to convert ``requests.HTTPError`` exceptions with the
+        Callable used to convert ``HTTPError`` exceptions with the
         following signature:
 
             def convert_error(ex)
                 ...
 
-        where ``ex`` is an instance of ``requests.HTTPError``.
+        where ``ex`` is an instance of ``HTTPError``.
 
     `before_request`
         A list of callables to invoke each time before a request is made with
@@ -323,16 +343,16 @@ class _ObjectifyMixin(object):
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
 
-class Error(requests.HTTPError):
+class Error(HTTPError):
     """
     Represents HTTP errors detected by `Client` as specialization of
-    `requests.HTTPError`.
+    `HTTPError`.
 
     `message`
         String message formatted by `format_message`. For different formatting
          derived from `Error`, change `format_message` and pass that as the
          `error_cls` when configuring your `Client`.
-    `status_code`
+    `code`
         The HTTP status code associated with the response. This will always be
         present.
 
@@ -343,7 +363,7 @@ class Error(requests.HTTPError):
     def __init__(self, requests_ex):
         message = self.format_message(requests_ex)
         super(Error, self).__init__(message)
-        self.status_code = requests_ex.response.status_code
+        self.code = requests_ex.response.code
         data = getattr(requests_ex.response, 'data', {})
         for k, v in data.iteritems():
             setattr(self, k, v)
@@ -351,11 +371,11 @@ class Error(requests.HTTPError):
     @classmethod
     def format_message(cls, requests_ex):
         data = getattr(requests_ex.response, 'data', {})
-        status = httplib.responses[requests_ex.response.status_code]
+        status = httplib.responses[requests_ex.response.code]
         status = data.pop('status', status)
-        status_code = data.pop('status_code', requests_ex.response.status_code)
+        code = data.pop('code', requests_ex.response.code)
         desc = data.pop('description', None)
-        message = ': '.join(str(v) for v in [status, status_code, desc] if v)
+        message = ': '.join(str(v) for v in [status, code, desc] if v)
         return message
 
     def __repr__(self):
@@ -366,7 +386,7 @@ class Error(requests.HTTPError):
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
 
-class Redirection(requests.HTTPError):
+class Redirection(HTTPError):
 
     def __init__(self, requests_ex):
         message = '%s' % requests_ex
@@ -374,7 +394,7 @@ class Redirection(requests.HTTPError):
         super(Redirection, self).__init__(message, response=response)
 
 
-class Client(threading.local, object):
+class Client(object):
     """
     Wrapper for all HTTP communication, which is done using requests.
 
@@ -441,7 +461,7 @@ class Client(threading.local, object):
 
     def __init__(self, keep_alive=True):
         super(Client, self).__init__()
-        self.interface = requests.session() if keep_alive else requests
+        self.interface = treq
         self._configs = []
 
     def get(self, uri, **kwargs):
@@ -464,27 +484,12 @@ class Client(threading.local, object):
 
     def _op(self, f, uri, **kwargs):
 
-        def handle_redirect(response):
-            if not kwargs.get('return_response', True):
-                return
-            if kwargs['allow_redirects']:
-                return
-
-            http_error_msg = '%s Client Error: Redirect' % (
-                response.status_code
-            )
-            http_error = requests.HTTPError(http_error_msg)
-            http_error.response = response
-            raise http_error
-
         def handle_error(ex):
             if (kwargs.get('return_response', True) and
-                        'Content-Type' in ex.response.headers):
+                    ex.response.headers.hasHeader("Content-Type")):
                 ex.response.data = self._deserialize(ex.response)
             for handler in self.config.after_request:
                 handler(ex.response)
-            if ex.response.status_code in requests.sessions.REDIRECT_STATI:
-                raise Redirection(ex)
             ex = self.config.error_cls(ex)
             raise ex
 
@@ -502,24 +507,36 @@ class Client(threading.local, object):
         for handler in self.config.before_request:
             handler(method, url, kwargs)
 
-        try:
-            response = f(url, **kwargs)
+        d = f(url, **kwargs)
+
+        def _after_content(content, response):
+            setattr(response, "content", content)
+            response.data = None
             if kwargs.get('return_response', True):
-                response.raise_for_status()
-            if response.status_code in requests.sessions.REDIRECT_STATI:
-                handle_redirect(response)
-        except requests.HTTPError as ex:
-            handle_error(ex)
+                error_msg = ''
+                if 400 <= response.code < 500:
+                    error_msg = '%s Client Error: %s' % (response.code, response.phrase)
+                elif 500 <= response.code < 600:
+                    error_msg = '%s Server Error: %s' % (response.code, response.phrase)
+                if error_msg:
+                    err = HTTPError(error_msg, response=response)
+                    handle_error(err)
+            if (kwargs.get('return_response', True) and
+                    response.headers.hasHeader("Content-Type")):
+                response.data = self._deserialize(response)
 
-        response.data = None
-        if (kwargs.get('return_response', True) and
-                'Content-Type' in response.headers):
-            response.data = self._deserialize(response)
+            for handler in self.config.after_request:
+                handler(response)
 
-        for handler in self.config.after_request:
-            handler(response)
+            return response
 
-        return response
+        def _after_request(res):
+            next_d = treq.content(res)
+            next_d.addCallback(_after_content, res)
+            return next_d
+
+        d.addCallback(_after_request)
+        return d
 
     @abc.abstractmethod
     def _serialize(self, payload):
@@ -668,8 +685,13 @@ class Pagination(object):
         ]
         qs = urllib.urlencode(qs, doseq=True)
         uri = self.uri + qs
-        resp = self.resource_cls.client.get(uri)
-        return self.resource_cls.page_cls(self.resource_cls, **resp.data)
+
+        def _after_get(resp):
+            return self.resource_cls.page_cls(self.resource_cls, **resp.data)
+
+        d = self.resource_cls.client.get(uri)
+        d.addCallback(_after_get)
+        return d
 
     def count(self):
         if self._current:
@@ -1099,8 +1121,12 @@ class ResourceCollection(PaginationMixin):
         self.pagination = Pagination(resource_cls, uri, current=page)
 
     def create(self, **kwargs):
-        resp = self.resource_cls.client.post(self.uri, data=kwargs)
-        return self.resource_cls._load(self.resource_cls, resp.data)
+        def _after_create(resp):
+            return self.resource_cls._load(self.resource_cls, resp.data)
+
+        d = self.resource_cls.client.post(self.uri, data=kwargs)
+        d.addCallback(_after_create)
+        return d
 
     def filter(self, *args, **kwargs):
         q = self.resource_cls.query_cls(
@@ -1366,15 +1392,22 @@ class Resource(_ObjectifyMixin):
 
     @classmethod
     def get(cls, uri):
-        resp = cls.client.get(uri)
-        return cls(**resp.data)
+        def _after_get(resp):
+            return cls(**resp.data)
+
+        d = cls.client.get(uri)
+        d.addCallback(_after_get)
+        return d
 
     def refresh(self):
-        resp = self.client.get(self.uri)
-        instance = self.__class__(**resp.data)
-        self.__dict__.clear()
-        self.__dict__.update(instance.__dict__)
-        return self
+        def _after_refresh(resp):
+            instance = self.__class__(**resp.data)
+            self.__dict__.clear()
+            self.__dict__.update(instance.__dict__)
+            return self
+        d = self.client.get(self.uri)
+        d.addCallback(_after_refresh)
+        return d
 
     def save(self):
         cls = type(self)
@@ -1396,13 +1429,17 @@ class Resource(_ObjectifyMixin):
             if not isinstance(v, (Resource, cls.collection_cls))
         )
 
-        resp = method(uri, data=attrs)
+        d = method(uri, data=attrs)
 
-        instance = self.__class__(**resp.data)
-        self.__dict__.clear()
-        self.__dict__.update(instance.__dict__)
+        def _after_save(resp):
+            instance = self.__class__(**resp.data)
+            self.__dict__.clear()
+            self.__dict__.update(instance.__dict__)
 
-        return self
+            return self
+
+        d.addCallback(_after_save)
+        return d
 
     def delete(self):
-        self.client.delete(self.uri)
+        return self.client.delete(self.uri)
