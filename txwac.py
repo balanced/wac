@@ -12,6 +12,7 @@ import urllib
 import urlparse
 
 import treq
+from twisted.internet import defer
 
 __version__ = '0.01'
 
@@ -48,7 +49,7 @@ class RequestException(IOError):
 
 
 class HTTPError(RequestException):
-            """An HTTP error occurred."""
+    """An HTTP error occurred."""
 
 
 # utilities
@@ -184,7 +185,7 @@ class Config(object):
                  auth=None,
                  headers=None,
                  echo=False,
-                 allow_redirects=False,
+                 allow_redirects=True,
                  error_cls=None,
                  keep_alive=False,
                  timeout=None,
@@ -209,7 +210,7 @@ class Config(object):
               auth=None,
               headers=None,
               echo=False,
-              allow_redirects=False,
+              allow_redirects=True,
               error_cls=None,
               keep_alive=False,
               timeout=None,
@@ -495,6 +496,15 @@ class Client(object):
 
         kwargs.setdefault('headers', {})
         kwargs['headers'].update(self.config.headers)
+
+        def _list_header(h):
+            h = list(h)
+            if isinstance(h[0], unicode):
+                h[0] = h[0].encode('utf-8')
+            if isinstance(h[1], unicode):
+                h[1] = h[1].encode('utf-8')
+            return (h[0], [h[1]]) if not isinstance(h[1], list) else h
+        kwargs["headers"] = dict(map(_list_header, kwargs["headers"].items()))
         kwargs.setdefault('allow_redirects', self.config.allow_redirects)
         if self.config.auth:
             kwargs['auth'] = self.config.auth
@@ -502,6 +512,9 @@ class Client(object):
             kwargs['timeout'] = self.config.timeout
 
         url = self.config.root_url + uri
+
+        if isinstance(url, unicode):
+            url = url.encode("utf-8")
 
         method = f.__name__.upper()
         for handler in self.config.before_request:
@@ -536,6 +549,7 @@ class Client(object):
             return next_d
 
         d.addCallback(_after_request)
+        # d.addErrback(_after_err)
         return d
 
     @abc.abstractmethod
@@ -696,9 +710,13 @@ class Pagination(object):
     def count(self):
         if self._current:
             total = self._current.total
-        else:
-            total = self._page(0, 1).total
-        return int(math.ceil(total / self.size))
+            return defer.succeed(int(math.ceil(total / self.size)))
+
+        def _after_count(page):
+            return int(math.ceil(page.total / self.size))
+        d = self._page(0, 1)
+        d.addCallback(_after_count)
+        return d
 
     @property
     def fetched(self):
@@ -710,15 +728,18 @@ class Pagination(object):
             self.first()
         return self._current
 
+    @defer.inlineCallbacks
     def one(self):
-        if self.count() > 1:
+        cnt = yield self.count()
+        if cnt > 1:
             raise MultipleResultsFound()
-        self._current = self._page(0)
-        return self._current
+        self._current = yield self._page(0)
+        defer.returnValue(self._current)
 
+    @defer.inlineCallbacks
     def first(self):
-        self._current = self._page(0)
-        return self._current
+        self._current = yield self._page(0)
+        defer.returnValue(self._current)
 
     def previous(self):
         if not self.current.previous:
@@ -759,16 +780,19 @@ class Pagination(object):
         pages = [self[i] for i in xrange(start, stop, step)]
         return pages
 
+    @defer.inlineCallbacks
     def _index(self, key):
+        cnt = yield self.count()
         if key < 0:
-            key += self.count()
+            key += cnt
             if key < 0:
                 raise IndexError('index out of range')
-        elif key > self.count():
+        elif key > cnt:
             raise IndexError('index  out of range')
         if self.current.index == key:
-            return self.current
-        return self._page(key)
+            defer.returnValue(self.current)
+        page = yield self._page(key)
+        defer.returnValue(page)
 
     def __getitem__(self, key):
         if isinstance(key, slice):
@@ -791,37 +815,45 @@ class PaginationMixin(object):
     The standard sequence indexing and slicing protocols are supported.
     """
 
+    @defer.inlineCallbacks
     def count(self):
         if self.pagination.fetched:
-            total = self.pagination.current.total
+            total = yield self.pagination.current.total
         else:
-            total = self.pagination._page(0, 1).total
-        return total
+            page = yield self.pagination._page(0, 1)
+            total = page.total
+        defer.returnValue(total)
 
     def all(self):
+        raise DeprecationWarning("This does not work here")
         return list(self)
 
+    @defer.inlineCallbacks
     def one(self):
         if self.pagination.fetched and self.pagination.current.offset == 0:
             items = self.pagination.current.items
             total = self.pagination.current.total
         else:
-            items = self.pagination._page(0, 2).items
+            page = yield self.pagination._page(0, 2)
+            items = page.items
             total = len(items)
         if total > 1:
             raise MultipleResultsFound()
         elif total == 0:
             raise NoResultFound()
-        return items[0]
+        defer.returnValue(items[0])
 
+    @defer.inlineCallbacks
     def first(self):
         if self.pagination.fetched and self.pagination.current.offset == 0:
             items = self.pagination.current.items
         else:
-            items = self.pagination._page(0, 1).items
-        return items[0] if items else None
+            page = yield self.pagination._page(0, 1)
+            items = page.items
+        defer.returnValue(items[0] if items else None)
 
     def __iter__(self):
+        raise DeprecationWarning("This also doesn't work")
         self.pagination.first()
         for page in self.pagination:
             for v in page.items:
