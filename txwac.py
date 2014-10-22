@@ -724,9 +724,14 @@ class Pagination(object):
 
     @property
     def current(self):
+        def _after_first(res):
+            return self._current
+
         if not self._current:
-            self.first()
-        return self._current
+            d = self.first()
+            d.addCallback(_after_first)
+            return d
+        return defer.succeed(self._current)
 
     @defer.inlineCallbacks
     def one(self):
@@ -741,17 +746,21 @@ class Pagination(object):
         self._current = yield self._page(0)
         defer.returnValue(self._current)
 
+    @defer.inlineCallbacks
     def previous(self):
-        if not self.current.previous:
-            return None
+        current = yield self.current
+        if not current.previous:
+            defer.returnValue(None)
         self._current = self._current.previous
-        return self._current
+        defer.returnValue(self._current)
 
+    @defer.inlineCallbacks
     def next(self):
-        if not self.current.next:
-            return None
+        current = yield self.current
+        if not current.next:
+            defer.returnValue(None)
         self._current = self._current.next
-        return self._current
+        defer.returnValue(self._current)
 
     def __iter__(self):
         page = self.current
@@ -824,9 +833,16 @@ class PaginationMixin(object):
             total = page.total
         defer.returnValue(total)
 
+    @defer.inlineCallbacks
     def all(self):
-        raise DeprecationWarning("This does not work here")
-        return list(self)
+        out = []
+        c = yield self.pagination.current
+        out.extend(c.items)
+        n = yield self.pagination.next()
+        while n:
+            out.extend(n.items)
+            n = yield self.pagination.next()
+        defer.returnValue(out)
 
     @defer.inlineCallbacks
     def one(self):
