@@ -201,7 +201,7 @@ class Config(object):
             error_cls=error_cls,
             keep_alive=keep_alive,
             timeout=timeout,
-            )
+        )
 
     def reset(self,
               root_url,
@@ -267,7 +267,7 @@ class _ObjectifyMixin(object):
                     "dictionary", _type)
             else:
                 if (issubclass(cls, Resource) and
-                    issubclass(_type_cls, Page)):
+                   issubclass(_type_cls, Page)):
                     page = _type_cls(resource_cls, **value)
                     value = resource_cls.collection_cls(
                         resource_cls,
@@ -316,8 +316,7 @@ class _ObjectifyMixin(object):
         cls = type(self)
         if cls.type and '_type' in fields and fields['_type'] != cls.type:
             raise ValueError('{0} type "{1}" does not match "{2}"'
-                             .format(cls.__name__, cls.type, fields['_type'])
-            )
+                             .format(cls.__name__, cls.type, fields['_type']))
         for key, value in fields.iteritems():
             if '_uris' in fields and key in fields['_uris']:
                 _uri = fields['_uris'][key]
@@ -846,9 +845,10 @@ class PaginationMixin(object):
 
     @defer.inlineCallbacks
     def one(self):
-        if self.pagination.fetched and self.pagination.current.offset == 0:
-            items = self.pagination.current.items
-            total = self.pagination.current.total
+        current = yield self.pagination.current
+        if self.pagination.fetched and current.offset == 0:
+            items = current.items
+            total = current.total
         else:
             page = yield self.pagination._page(0, 2)
             items = page.items
@@ -861,8 +861,9 @@ class PaginationMixin(object):
 
     @defer.inlineCallbacks
     def first(self):
-        if self.pagination.fetched and self.pagination.current.offset == 0:
-            items = self.pagination.current.items
+        current = yield self.pagination.current
+        if self.pagination.fetched and current.offset == 0:
+            items = current.items
         else:
             page = yield self.pagination._page(0, 1)
             items = page.items
