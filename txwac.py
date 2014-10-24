@@ -774,9 +774,6 @@ class Pagination(object):
                 page = self.resource_cls.page_cls(self.resource_cls, **resp.data)
         self._current = page
 
-    def __len__(self):
-        return self.count()
-
     def _slice(self, key):
         if (key.start is not None and not isinstance(key.start, int) or
             key.stop is not None and not isinstance(key.stop, int) or
@@ -797,8 +794,9 @@ class Pagination(object):
                 raise IndexError('index out of range')
         elif key > cnt:
             raise IndexError('index  out of range')
-        if self.current.index == key:
-            defer.returnValue(self.current)
+        current = yield self.current
+        if current.index == key:
+            defer.returnValue(current)
         page = yield self._page(key)
         defer.returnValue(page)
 
@@ -870,14 +868,11 @@ class PaginationMixin(object):
         defer.returnValue(items[0] if items else None)
 
     def __iter__(self):
-        raise DeprecationWarning("This also doesn't work")
+        raise NotImplemented("This doesn't work")
         self.pagination.first()
         for page in self.pagination:
             for v in page.items:
                 yield v
-
-    def __len__(self):
-        return self.count()
 
     def _slice(self, key):
         if (key.start is not None and not isinstance(key.start, int) or
@@ -898,17 +893,20 @@ class PaginationMixin(object):
             items.append(item)
         return items
 
+    @defer.inlineCallbacks
     def _index(self, key):
+        cnt = yield self.count()
         if key < 0:
-            key += self.count()
+            key += cnt
             if key < 0:
                 raise IndexError('index out of range')
         idx = int(key / self.pagination.size)
-        page = self.pagination[idx]
+        page = yield self.pagination._index(idx)
         offset = key % self.pagination.size
-        if len(self.pagination.current.items) < offset:
+        current = yield self.pagination.current
+        if len(current.items) < offset:
             raise IndexError('index out of range')
-        return page.items[offset]
+        defer.returnValue(page.items[offset])
 
     def __getitem__(self, key):
         if isinstance(key, slice):
