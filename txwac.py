@@ -7,14 +7,14 @@ import logging
 import math
 import pprint
 import re
-import threading
 import httplib
 import urllib
 import urlparse
 
-import requests
+import treq
+from twisted.internet import defer
 
-__version__ = '0.23'
+__version__ = '0.1'
 
 __all__ = [
     'Config',
@@ -29,6 +29,27 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+# Errors
+
+class RequestException(IOError):
+    """There was an ambiguous exception that occurred while handling your
+    request."""
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize RequestException with `request` and `response` objects.
+        """
+        response = kwargs.pop('response', None)
+        self.response = response
+        self.request = kwargs.pop('request', None)
+        if (response is not None and not self.request and hasattr(response, 'request')):
+            self.request = self.response.request
+            super(RequestException, self).__init__(*args, **kwargs)
+
+
+class HTTPError(RequestException):
+    """An HTTP error occurred."""
 
 
 # utilities
@@ -115,13 +136,13 @@ class Config(object):
         Location header for a 301). Defaults to False.
 
     `error_cls`
-        Callable used to convert ``requests.HTTPError`` exceptions with the
+        Callable used to convert ``HTTPError`` exceptions with the
         following signature:
 
             def convert_error(ex)
                 ...
 
-        where ``ex`` is an instance of ``requests.HTTPError``.
+        where ``ex`` is an instance of ``HTTPError``.
 
     `before_request`
         A list of callables to invoke each time before a request is made with
@@ -164,7 +185,7 @@ class Config(object):
                  auth=None,
                  headers=None,
                  echo=False,
-                 allow_redirects=False,
+                 allow_redirects=True,
                  error_cls=None,
                  keep_alive=False,
                  timeout=None,
@@ -180,7 +201,7 @@ class Config(object):
             error_cls=error_cls,
             keep_alive=keep_alive,
             timeout=timeout,
-            )
+        )
 
     def reset(self,
               root_url,
@@ -189,7 +210,7 @@ class Config(object):
               auth=None,
               headers=None,
               echo=False,
-              allow_redirects=False,
+              allow_redirects=True,
               error_cls=None,
               keep_alive=False,
               timeout=None,
@@ -246,7 +267,7 @@ class _ObjectifyMixin(object):
                     "dictionary", _type)
             else:
                 if (issubclass(cls, Resource) and
-                    issubclass(_type_cls, Page)):
+                   issubclass(_type_cls, Page)):
                     page = _type_cls(resource_cls, **value)
                     value = resource_cls.collection_cls(
                         resource_cls,
@@ -295,8 +316,7 @@ class _ObjectifyMixin(object):
         cls = type(self)
         if cls.type and '_type' in fields and fields['_type'] != cls.type:
             raise ValueError('{0} type "{1}" does not match "{2}"'
-                             .format(cls.__name__, cls.type, fields['_type'])
-            )
+                             .format(cls.__name__, cls.type, fields['_type']))
         for key, value in fields.iteritems():
             if '_uris' in fields and key in fields['_uris']:
                 _uri = fields['_uris'][key]
@@ -323,16 +343,16 @@ class _ObjectifyMixin(object):
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
 
-class Error(requests.HTTPError):
+class Error(HTTPError):
     """
     Represents HTTP errors detected by `Client` as specialization of
-    `requests.HTTPError`.
+    `HTTPError`.
 
     `message`
         String message formatted by `format_message`. For different formatting
          derived from `Error`, change `format_message` and pass that as the
          `error_cls` when configuring your `Client`.
-    `status_code`
+    `code`
         The HTTP status code associated with the response. This will always be
         present.
 
@@ -343,7 +363,7 @@ class Error(requests.HTTPError):
     def __init__(self, requests_ex):
         message = self.format_message(requests_ex)
         super(Error, self).__init__(message)
-        self.status_code = requests_ex.response.status_code
+        self.code = requests_ex.response.code
         data = getattr(requests_ex.response, 'data', {})
         for k, v in data.iteritems():
             setattr(self, k, v)
@@ -351,11 +371,11 @@ class Error(requests.HTTPError):
     @classmethod
     def format_message(cls, requests_ex):
         data = getattr(requests_ex.response, 'data', {})
-        status = httplib.responses[requests_ex.response.status_code]
+        status = httplib.responses[requests_ex.response.code]
         status = data.pop('status', status)
-        status_code = data.pop('status_code', requests_ex.response.status_code)
+        code = data.pop('code', requests_ex.response.code)
         desc = data.pop('description', None)
-        message = ': '.join(str(v) for v in [status, status_code, desc] if v)
+        message = ': '.join(str(v) for v in [status, code, desc] if v)
         return message
 
     def __repr__(self):
@@ -366,7 +386,7 @@ class Error(requests.HTTPError):
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
 
-class Redirection(requests.HTTPError):
+class Redirection(HTTPError):
 
     def __init__(self, requests_ex):
         message = '%s' % requests_ex
@@ -374,7 +394,7 @@ class Redirection(requests.HTTPError):
         super(Redirection, self).__init__(message, response=response)
 
 
-class Client(threading.local, object):
+class Client(object):
     """
     Wrapper for all HTTP communication, which is done using requests.
 
@@ -441,7 +461,7 @@ class Client(threading.local, object):
 
     def __init__(self, keep_alive=True):
         super(Client, self).__init__()
-        self.interface = requests.session() if keep_alive else requests
+        self.interface = treq
         self._configs = []
 
     def get(self, uri, **kwargs):
@@ -464,32 +484,26 @@ class Client(threading.local, object):
 
     def _op(self, f, uri, **kwargs):
 
-        def handle_redirect(response):
-            if not kwargs.get('return_response', True):
-                return
-            if kwargs['allow_redirects']:
-                return
-
-            http_error_msg = '%s Client Error: Redirect' % (
-                response.status_code
-            )
-            http_error = requests.HTTPError(http_error_msg)
-            http_error.response = response
-            raise http_error
-
         def handle_error(ex):
             if (kwargs.get('return_response', True) and
-                        'Content-Type' in ex.response.headers):
+                    ex.response.headers.hasHeader("Content-Type")):
                 ex.response.data = self._deserialize(ex.response)
             for handler in self.config.after_request:
                 handler(ex.response)
-            if ex.response.status_code in requests.sessions.REDIRECT_STATI:
-                raise Redirection(ex)
             ex = self.config.error_cls(ex)
             raise ex
 
         kwargs.setdefault('headers', {})
         kwargs['headers'].update(self.config.headers)
+
+        def _list_header(h):
+            h = list(h)
+            if isinstance(h[0], unicode):
+                h[0] = h[0].encode('utf-8')
+            if isinstance(h[1], unicode):
+                h[1] = h[1].encode('utf-8')
+            return (h[0], [h[1]]) if not isinstance(h[1], list) else h
+        kwargs["headers"] = dict(map(_list_header, kwargs["headers"].items()))
         kwargs.setdefault('allow_redirects', self.config.allow_redirects)
         if self.config.auth:
             kwargs['auth'] = self.config.auth
@@ -498,28 +512,44 @@ class Client(threading.local, object):
 
         url = self.config.root_url + uri
 
+        if isinstance(url, unicode):
+            url = url.encode("utf-8")
+
         method = f.__name__.upper()
         for handler in self.config.before_request:
             handler(method, url, kwargs)
 
-        try:
-            response = f(url, **kwargs)
+        d = f(url, **kwargs)
+
+        def _after_content(content, response):
+            setattr(response, "content", content)
+            response.data = None
             if kwargs.get('return_response', True):
-                response.raise_for_status()
-            if response.status_code in requests.sessions.REDIRECT_STATI:
-                handle_redirect(response)
-        except requests.HTTPError as ex:
-            handle_error(ex)
+                error_msg = ''
+                if 400 <= response.code < 500:
+                    error_msg = '%s Client Error: %s' % (response.code, response.phrase)
+                elif 500 <= response.code < 600:
+                    error_msg = '%s Server Error: %s' % (response.code, response.phrase)
+                if error_msg:
+                    err = HTTPError(error_msg, response=response)
+                    handle_error(err)
+            if (kwargs.get('return_response', True) and
+                    response.headers.hasHeader("Content-Type")):
+                response.data = self._deserialize(response)
 
-        response.data = None
-        if (kwargs.get('return_response', True) and
-                'Content-Type' in response.headers):
-            response.data = self._deserialize(response)
+            for handler in self.config.after_request:
+                handler(response)
 
-        for handler in self.config.after_request:
-            handler(response)
+            return response
 
-        return response
+        def _after_request(res):
+            next_d = treq.content(res)
+            next_d.addCallback(_after_content, res)
+            return next_d
+
+        d.addCallback(_after_request)
+        # d.addErrback(_after_err)
+        return d
 
     @abc.abstractmethod
     def _serialize(self, payload):
@@ -668,15 +698,24 @@ class Pagination(object):
         ]
         qs = urllib.urlencode(qs, doseq=True)
         uri = self.uri + qs
-        resp = self.resource_cls.client.get(uri)
-        return self.resource_cls.page_cls(self.resource_cls, **resp.data)
+
+        def _after_get(resp):
+            return self.resource_cls.page_cls(self.resource_cls, **resp.data)
+
+        d = self.resource_cls.client.get(uri)
+        d.addCallback(_after_get)
+        return d
 
     def count(self):
         if self._current:
             total = self._current.total
-        else:
-            total = self._page(0, 1).total
-        return int(math.ceil(total / self.size))
+            return defer.succeed(int(math.ceil(total / self.size)))
+
+        def _after_count(page):
+            return int(math.ceil(page.total / self.size))
+        d = self._page(0, 1)
+        d.addCallback(_after_count)
+        return d
 
     @property
     def fetched(self):
@@ -684,31 +723,43 @@ class Pagination(object):
 
     @property
     def current(self):
+        def _after_first(res):
+            return self._current
+
         if not self._current:
-            self.first()
-        return self._current
+            d = self.first()
+            d.addCallback(_after_first)
+            return d
+        return defer.succeed(self._current)
 
+    @defer.inlineCallbacks
     def one(self):
-        if self.count() > 1:
+        cnt = yield self.count()
+        if cnt > 1:
             raise MultipleResultsFound()
-        self._current = self._page(0)
-        return self._current
+        self._current = yield self._page(0)
+        defer.returnValue(self._current)
 
+    @defer.inlineCallbacks
     def first(self):
-        self._current = self._page(0)
-        return self._current
+        self._current = yield self._page(0)
+        defer.returnValue(self._current)
 
+    @defer.inlineCallbacks
     def previous(self):
-        if not self.current.previous:
-            return None
+        current = yield self.current
+        if not current.previous:
+            defer.returnValue(None)
         self._current = self._current.previous
-        return self._current
+        defer.returnValue(self._current)
 
+    @defer.inlineCallbacks
     def next(self):
-        if not self.current.next:
-            return None
+        current = yield self.current
+        if not current.next:
+            defer.returnValue(None)
         self._current = self._current.next
-        return self._current
+        defer.returnValue(self._current)
 
     def __iter__(self):
         page = self.current
@@ -723,9 +774,6 @@ class Pagination(object):
                 page = self.resource_cls.page_cls(self.resource_cls, **resp.data)
         self._current = page
 
-    def __len__(self):
-        return self.count()
-
     def _slice(self, key):
         if (key.start is not None and not isinstance(key.start, int) or
             key.stop is not None and not isinstance(key.stop, int) or
@@ -737,16 +785,20 @@ class Pagination(object):
         pages = [self[i] for i in xrange(start, stop, step)]
         return pages
 
+    @defer.inlineCallbacks
     def _index(self, key):
+        cnt = yield self.count()
         if key < 0:
-            key += self.count()
+            key += cnt
             if key < 0:
                 raise IndexError('index out of range')
-        elif key > self.count():
+        elif key > cnt:
             raise IndexError('index  out of range')
-        if self.current.index == key:
-            return self.current
-        return self._page(key)
+        current = yield self.current
+        if current.index == key:
+            defer.returnValue(current)
+        page = yield self._page(key)
+        defer.returnValue(page)
 
     def __getitem__(self, key):
         if isinstance(key, slice):
@@ -769,44 +821,58 @@ class PaginationMixin(object):
     The standard sequence indexing and slicing protocols are supported.
     """
 
+    @defer.inlineCallbacks
     def count(self):
         if self.pagination.fetched:
-            total = self.pagination.current.total
+            total = yield self.pagination.current.total
         else:
-            total = self.pagination._page(0, 1).total
-        return total
+            page = yield self.pagination._page(0, 1)
+            total = page.total
+        defer.returnValue(total)
 
+    @defer.inlineCallbacks
     def all(self):
-        return list(self)
+        out = []
+        c = yield self.pagination.current
+        out.extend(c.items)
+        n = yield self.pagination.next()
+        while n:
+            out.extend(n.items)
+            n = yield self.pagination.next()
+        defer.returnValue(out)
 
+    @defer.inlineCallbacks
     def one(self):
-        if self.pagination.fetched and self.pagination.current.offset == 0:
-            items = self.pagination.current.items
-            total = self.pagination.current.total
+        current = yield self.pagination.current
+        if self.pagination.fetched and current.offset == 0:
+            items = current.items
+            total = current.total
         else:
-            items = self.pagination._page(0, 2).items
+            page = yield self.pagination._page(0, 2)
+            items = page.items
             total = len(items)
         if total > 1:
             raise MultipleResultsFound()
         elif total == 0:
             raise NoResultFound()
-        return items[0]
+        defer.returnValue(items[0])
 
+    @defer.inlineCallbacks
     def first(self):
-        if self.pagination.fetched and self.pagination.current.offset == 0:
-            items = self.pagination.current.items
+        current = yield self.pagination.current
+        if self.pagination.fetched and current.offset == 0:
+            items = current.items
         else:
-            items = self.pagination._page(0, 1).items
-        return items[0] if items else None
+            page = yield self.pagination._page(0, 1)
+            items = page.items
+        defer.returnValue(items[0] if items else None)
 
     def __iter__(self):
+        raise NotImplemented("This doesn't work")
         self.pagination.first()
         for page in self.pagination:
             for v in page.items:
                 yield v
-
-    def __len__(self):
-        return self.count()
 
     def _slice(self, key):
         if (key.start is not None and not isinstance(key.start, int) or
@@ -827,17 +893,20 @@ class PaginationMixin(object):
             items.append(item)
         return items
 
+    @defer.inlineCallbacks
     def _index(self, key):
+        cnt = yield self.count()
         if key < 0:
-            key += self.count()
+            key += cnt
             if key < 0:
                 raise IndexError('index out of range')
         idx = int(key / self.pagination.size)
-        page = self.pagination[idx]
+        page = yield self.pagination._index(idx)
         offset = key % self.pagination.size
-        if len(self.pagination.current.items) < offset:
+        current = yield self.pagination.current
+        if len(current.items) < offset:
             raise IndexError('index out of range')
-        return page.items[offset]
+        defer.returnValue(page.items[offset])
 
     def __getitem__(self, key):
         if isinstance(key, slice):
@@ -1099,8 +1168,12 @@ class ResourceCollection(PaginationMixin):
         self.pagination = Pagination(resource_cls, uri, current=page)
 
     def create(self, **kwargs):
-        resp = self.resource_cls.client.post(self.uri, data=kwargs)
-        return self.resource_cls._load(self.resource_cls, resp.data)
+        def _after_create(resp):
+            return self.resource_cls._load(self.resource_cls, resp.data)
+
+        d = self.resource_cls.client.post(self.uri, data=kwargs)
+        d.addCallback(_after_create)
+        return d
 
     def filter(self, *args, **kwargs):
         q = self.resource_cls.query_cls(
@@ -1366,15 +1439,22 @@ class Resource(_ObjectifyMixin):
 
     @classmethod
     def get(cls, uri):
-        resp = cls.client.get(uri)
-        return cls(**resp.data)
+        def _after_get(resp):
+            return cls(**resp.data)
+
+        d = cls.client.get(uri)
+        d.addCallback(_after_get)
+        return d
 
     def refresh(self):
-        resp = self.client.get(self.uri)
-        instance = self.__class__(**resp.data)
-        self.__dict__.clear()
-        self.__dict__.update(instance.__dict__)
-        return self
+        def _after_refresh(resp):
+            instance = self.__class__(**resp.data)
+            self.__dict__.clear()
+            self.__dict__.update(instance.__dict__)
+            return self
+        d = self.client.get(self.uri)
+        d.addCallback(_after_refresh)
+        return d
 
     def save(self):
         cls = type(self)
@@ -1396,13 +1476,17 @@ class Resource(_ObjectifyMixin):
             if not isinstance(v, (Resource, cls.collection_cls))
         )
 
-        resp = method(uri, data=attrs)
+        d = method(uri, data=attrs)
 
-        instance = self.__class__(**resp.data)
-        self.__dict__.clear()
-        self.__dict__.update(instance.__dict__)
+        def _after_save(resp):
+            instance = self.__class__(**resp.data)
+            self.__dict__.clear()
+            self.__dict__.update(instance.__dict__)
 
-        return self
+            return self
+
+        d.addCallback(_after_save)
+        return d
 
     def delete(self):
-        self.client.delete(self.uri)
+        return self.client.delete(self.uri)
