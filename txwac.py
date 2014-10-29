@@ -14,7 +14,7 @@ import urlparse
 import treq
 from twisted.internet import defer
 
-__version__ = '0.01'
+__version__ = '0.1'
 
 __all__ = [
     'Config',

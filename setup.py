@@ -36,7 +36,7 @@ setup(
     install_requires=[
         'treq'
     ],
-    test_suite='tests',
+    test_suite='trial',
     classifiers=[
         'Intended Audience :: Developers',
         'Development Status :: 4 - Beta',
