@@ -15,10 +15,10 @@ setup(
              .compile(r".*__version__ = '(.*?)'", re.S)
              .match(open('wac.py').read())
              .group(1)),
-    url='https://github.com/bninja/wac/',
+    url='https://github.com/balanced/wac/',
     license=open('LICENSE').read(),
-    author='wac',
-    author_email='wac@example.com',
+    author='Balanced',
+    author_email='dev+wac@balancedpayments.com',
     description='Writing RESTful API clients.',
     long_description=(
         open('README.rst').read() + '\n\n' +
