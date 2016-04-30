@@ -496,7 +496,10 @@ class Client(threading.local, object):
         if self.config.timeout is not None:
             kwargs['timeout'] = self.config.timeout
 
-        url = self.config.root_url + uri
+        if uri.startswith(self.config.root_url):
+            url = uri
+        else:
+            url = self.config.root_url + uri
 
         method = f.__name__.upper()
         for handler in self.config.before_request:
@@ -784,7 +787,7 @@ class PaginationMixin(object):
             items = self.pagination.current.items
             total = self.pagination.current.total
         else:
-            items = self.pagination._page(0, 2).items
+            items = self.pagination._page(0, 2).results
             total = len(items)
         if total > 1:
             raise MultipleResultsFound()
@@ -794,15 +797,15 @@ class PaginationMixin(object):
 
     def first(self):
         if self.pagination.fetched and self.pagination.current.offset == 0:
-            items = self.pagination.current.items
+            items = self.pagination.current.results
         else:
-            items = self.pagination._page(0, 1).items
+            items = self.pagination._page(0, 1).results
         return items[0] if items else None
 
     def __iter__(self):
         self.pagination.first()
         for page in self.pagination:
-            for v in page.items:
+            for v in page.results:
                 yield v
 
     def __len__(self):
@@ -1045,7 +1048,7 @@ class URIGen(object):
 
     @classmethod
     def _parse(cls, fragment):
-        fragment = fragment.strip('/')
+        fragment = fragment.lstrip('/')
         parts = []
         for part in fragment.split('/'):
             m = re.match(r'\{(?P<name>\w[\w_-]*)\}', part)
@@ -1395,7 +1398,6 @@ class Resource(_ObjectifyMixin):
             for k, v in attrs.iteritems()
             if not isinstance(v, (Resource, cls.collection_cls))
         )
-
         resp = method(uri, data=attrs)
 
         instance = self.__class__(**resp.data)
