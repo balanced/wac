@@ -27,3 +27,4 @@ docs/_build
 .pydevproject
 .project
 
+.idea
