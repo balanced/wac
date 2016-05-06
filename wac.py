@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 # http://stackoverflow.com/a/5191224/1339571
 class _ClassPropertyDescriptor(object):
-
     def __init__(self, fget, fset=None):
         self.fget = fget
         self.fset = fset
@@ -180,7 +179,7 @@ class Config(object):
             error_cls=error_cls,
             keep_alive=keep_alive,
             timeout=timeout,
-            )
+        )
 
     def reset(self,
               root_url,
@@ -233,7 +232,6 @@ class Config(object):
 
 
 class _ObjectifyMixin(object):
-
     @classmethod
     def _load(cls, resource_cls, value):
         if isinstance(value, dict) and '_type' in value:
@@ -246,7 +244,7 @@ class _ObjectifyMixin(object):
                     "dictionary", _type)
             else:
                 if (issubclass(cls, Resource) and
-                    issubclass(_type_cls, Page)):
+                        issubclass(_type_cls, Page)):
                     page = _type_cls(resource_cls, **value)
                     value = resource_cls.collection_cls(
                         resource_cls,
@@ -289,14 +287,14 @@ class _ObjectifyMixin(object):
             setattr(self, cached_key, value)
 
         if not hasattr(cls, property_key):
-            setattr(cls, property_key, property(_getter,  _setter))
+            setattr(cls, property_key, property(_getter, _setter))
 
     def _objectify(self, resource_cls, **fields):
         cls = type(self)
         if cls.type and '_type' in fields and fields['_type'] != cls.type:
             raise ValueError('{0} type "{1}" does not match "{2}"'
                              .format(cls.__name__, cls.type, fields['_type'])
-            )
+                             )
         for key, value in fields.iteritems():
             if '_uris' in fields and key in fields['_uris']:
                 _uri = fields['_uris'][key]
@@ -317,9 +315,9 @@ class _ObjectifyMixin(object):
 
     def __repr__(self):
         attrs = ', '.join([
-            '{0}={1}'.format(k, repr(v))
-            for k, v in self.__dict__.iteritems()
-        ])
+                              '{0}={1}'.format(k, repr(v))
+                              for k, v in self.__dict__.iteritems()
+                              ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
 
@@ -340,6 +338,7 @@ class Error(requests.HTTPError):
     in that dict is attached as an attribute to the exception with the
     corresponding value.
     """
+
     def __init__(self, requests_ex):
         message = self.format_message(requests_ex)
         super(Error, self).__init__(message)
@@ -360,14 +359,13 @@ class Error(requests.HTTPError):
 
     def __repr__(self):
         attrs = ', '.join([
-            '{0}={1}'.format(k, repr(v))
-            for k, v in self.__dict__.iteritems()
-        ])
+                              '{0}={1}'.format(k, repr(v))
+                              for k, v in self.__dict__.iteritems()
+                              ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
 
 class Redirection(requests.HTTPError):
-
     def __init__(self, requests_ex):
         message = '%s' % requests_ex
         response = requests_ex.response
@@ -496,7 +494,10 @@ class Client(threading.local, object):
         if self.config.timeout is not None:
             kwargs['timeout'] = self.config.timeout
 
-        url = self.config.root_url + uri
+        if uri.startswith(self.config.root_url):
+            url = uri
+        else:
+            url = self.config.root_url + uri
 
         method = f.__name__.upper()
         for handler in self.config.before_request:
@@ -513,7 +514,7 @@ class Client(threading.local, object):
 
         response.data = None
         if (kwargs.get('return_response', True) and
-                'Content-Type' in response.headers):
+                    'Content-Type' in response.headers):
             response.data = self._deserialize(response)
 
         for handler in self.config.after_request:
@@ -629,14 +630,14 @@ class Pagination(object):
             if len(parsed_qs['limit']) > 1:
                 raise ValueError(
                     'URI "{0}" has multiple limit parameters "{1}"'.format(
-                    uri, parsed_qs['limit'][0]))
+                        uri, parsed_qs['limit'][0]))
             limit = parsed_qs['limit'][0]
             try:
                 limit = int(limit)
             except (TypeError, ValueError):
                 raise ValueError(
                     'URI "{0}" has non-integer limit parameter "{1}"'.format(
-                    uri, limit))
+                        uri, limit))
             parsed_qs.pop('limit')
 
         offset = 0
@@ -650,7 +651,7 @@ class Pagination(object):
             except (TypeError, ValueError):
                 raise ValueError(
                     'URI "{0}" has non-integer offset parameter "{1}"'.format(
-                    uri, offset))
+                        uri, offset))
             parsed_qs.pop('offset')
 
         qs = urllib.urlencode(parsed_qs, doseq=True)
@@ -728,8 +729,8 @@ class Pagination(object):
 
     def _slice(self, key):
         if (key.start is not None and not isinstance(key.start, int) or
-            key.stop is not None and not isinstance(key.stop, int) or
-                key.step is not None and not isinstance(key.step, int)):
+                        key.stop is not None and not isinstance(key.stop, int) or
+                        key.step is not None and not isinstance(key.step, int)):
             raise TypeError('slice indices must be integers or None')
         if key.step == 0:
             raise TypeError('slice step cannot be zero')
@@ -784,7 +785,7 @@ class PaginationMixin(object):
             items = self.pagination.current.items
             total = self.pagination.current.total
         else:
-            items = self.pagination._page(0, 2).items
+            items = self.pagination._page(0, 2).results
             total = len(items)
         if total > 1:
             raise MultipleResultsFound()
@@ -794,15 +795,15 @@ class PaginationMixin(object):
 
     def first(self):
         if self.pagination.fetched and self.pagination.current.offset == 0:
-            items = self.pagination.current.items
+            items = self.pagination.current.results
         else:
-            items = self.pagination._page(0, 1).items
+            items = self.pagination._page(0, 1).results
         return items[0] if items else None
 
     def __iter__(self):
         self.pagination.first()
         for page in self.pagination:
-            for v in page.items:
+            for v in page.results:
                 yield v
 
     def __len__(self):
@@ -810,8 +811,8 @@ class PaginationMixin(object):
 
     def _slice(self, key):
         if (key.start is not None and not isinstance(key.start, int) or
-            key.stop is not None and not isinstance(key.stop, int) or
-                key.step is not None and not isinstance(key.step, int)):
+                        key.stop is not None and not isinstance(key.stop, int) or
+                        key.step is not None and not isinstance(key.step, int)):
             raise TypeError('slice indices must be integers or None')
         if key.step == 0:
             raise TypeError('slice step cannot be zero')
@@ -1045,7 +1046,7 @@ class URIGen(object):
 
     @classmethod
     def _parse(cls, fragment):
-        fragment = fragment.strip('/')
+        fragment = fragment.lstrip('/')
         parts = []
         for part in fragment.split('/'):
             m = re.match(r'\{(?P<name>\w[\w_-]*)\}', part)
@@ -1054,8 +1055,7 @@ class URIGen(object):
                 parts.append('{' + part + '}')
             else:
                 parts.append(part)
-        fmt = '/' + '/'.join(parts)
-        return fmt
+        return '/' + '/'.join(parts)
 
     @property
     def root_uri(self):
@@ -1098,9 +1098,11 @@ class ResourceCollection(PaginationMixin):
         self.resource_cls = resource_cls
         self.pagination = Pagination(resource_cls, uri, current=page)
 
-    def create(self, **kwargs):
-        resp = self.resource_cls.client.post(self.uri, data=kwargs)
-        return self.resource_cls._load(self.resource_cls, resp.data)
+    def create(self, data):
+        resp = self.resource_cls.client.post(self.uri, data=data)
+        instance = self.resource_cls(**resp.data)
+        return instance
+        # return self.resource_cls._load(self.resource_cls, resp.data)
 
     def filter(self, *args, **kwargs):
         q = self.resource_cls.query_cls(
@@ -1136,12 +1138,11 @@ class ResourceRegistry(dict):
             return cls
         raise LookupError(
             "No resource with type '{0}' registered"
-            .format(type)
+                .format(type)
         )
 
 
 class _ResourceField(object):
-
     def __init__(self, name):
         self.name = name
 
@@ -1214,7 +1215,6 @@ class _ResourceField(object):
 
 
 class _ResourceFields(object):
-
     def __init__(self, field_cls):
         self.field_cls = field_cls
 
@@ -1227,17 +1227,16 @@ class _ResourceFields(object):
 # http://effbot.org/zone/metaclass-plugins.htm
 # http://stackoverflow.com/a/396109
 class _ResourceMeta(type):
-
     def __new__(mcs, cls_name, cls_bases, cls_dict):
         cls = type.__new__(mcs, cls_name, cls_bases, cls_dict)
         cls.fields = cls.f = _ResourceFields(cls.field_cls)
         if not cls.type:
             return cls
         if (cls.type in cls.registry and
-            not issubclass(cls, cls.registry[cls.type])):
+                not issubclass(cls, cls.registry[cls.type])):
             logger.warning(
-               "Overriding type '%s' to %s already registered to '%s'",
-               cls.type, cls.__name__, cls.registry[cls.type].__name__)
+                "Overriding type '%s' to %s already registered to '%s'",
+                cls.type, cls.__name__, cls.registry[cls.type].__name__)
         cls.registry[cls.type] = cls
         if cls.page_cls.type not in cls.registry:
             cls.registry[cls.page_cls.type] = cls.page_cls
@@ -1352,9 +1351,9 @@ class Resource(_ObjectifyMixin):
 
     def __repr__(self):
         attrs = ', '.join([
-            '{0}={1}'.format(k, repr(v))
-            for k, v in self.__dict__.iteritems()
-        ])
+                              '{0}={1}'.format(k, repr(v))
+                              for k, v in self.__dict__.iteritems()
+                              ])
         return '{0}({1})'.format(self.__class__.__name__, attrs)
 
     @classproperty
@@ -1395,7 +1394,6 @@ class Resource(_ObjectifyMixin):
             for k, v in attrs.iteritems()
             if not isinstance(v, (Resource, cls.collection_cls))
         )
-
         resp = method(uri, data=attrs)
 
         instance = self.__class__(**resp.data)
