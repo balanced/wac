@@ -34,7 +34,7 @@ setup(
         'iso8601',
     ],
     install_requires=[
-        'certifi==0.0.8',  # force requests optional
+        'certifi==2022.12.7',  # force requests optional
         'chardet >= 1.0',  # force requests optional
         'requests>=1.2.3',
     ],
